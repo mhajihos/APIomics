@@ -1,38 +1,44 @@
-library(shiny)
-library(shinydashboard)
-library(shinyjs)
-library(limma)
-library(edgeR)
-library(clusterProfiler)
-library(org.Hs.eg.db)
-library(DT)
-library(shinyalert)
-library(gplots)
-library(RColorBrewer)
-library(plotly)
-library(textshape)
-library(radiant.data)
-library(ggplot2)
-library(ggheatmap)
-library(WGCNA)
-library(heatmaply)
-library(ggdendro)
-library(gridExtra)
-library(magrittr)
-library(tidyverse)
-library(reshape2)
-library(ggrepel)
-library(ggraph)
-library(igraph)
-library(tidygraph)
-library(ComplexHeatmap)
-library(shinydashboardPlus)
-library(corto)
-library(dplyr)
-library(httr)
-library(jsonlite)
-library(openxlsx)
-library(rentrez)
+#Main-Shiny_App_Code
+
+APIomics<-function()
+{
+
+
+  suppressMessages(suppressWarnings(library(shiny)))
+  suppressMessages(suppressWarnings(library(shinydashboard)))
+  suppressMessages(suppressWarnings(library(shinyjs)))
+  suppressMessages(suppressWarnings(library(limma)))
+  suppressMessages(suppressWarnings(library(edgeR)))
+  suppressMessages(suppressWarnings(library(clusterProfiler)))
+  suppressMessages(suppressWarnings(library(org.Hs.eg.db)))
+  suppressMessages(suppressWarnings(library(DT)))
+  suppressMessages(suppressWarnings(library(shinyalert)))
+  suppressMessages(suppressWarnings(library(gplots)))
+  suppressMessages(suppressWarnings(library(RColorBrewer)))
+  suppressMessages(suppressWarnings(library(plotly)))
+  suppressMessages(suppressWarnings(library(textshape)))
+  suppressMessages(suppressWarnings(library(radiant.data)))
+  suppressMessages(suppressWarnings(library(ggplot2)))
+  suppressMessages(suppressWarnings(library(ggheatmap)))
+  suppressMessages(suppressWarnings(library(WGCNA)))
+  suppressMessages(suppressWarnings(library(heatmaply)))
+  suppressMessages(suppressWarnings(library(ggdendro)))
+  suppressMessages(suppressWarnings(library(gridExtra)))
+  suppressMessages(suppressWarnings(library(magrittr)))
+  suppressMessages(suppressWarnings(library(tidyverse)))
+  suppressMessages(suppressWarnings(library(reshape2)))
+  suppressMessages(suppressWarnings(library(ggrepel)))
+  suppressMessages(suppressWarnings(library(ggraph)))
+  suppressMessages(suppressWarnings(library(igraph)))
+  suppressMessages(suppressWarnings(library(tidygraph)))
+  suppressMessages(suppressWarnings(library(ComplexHeatmap)))
+  suppressMessages(suppressWarnings(library(shinydashboardPlus)))
+  suppressMessages(suppressWarnings(library(corto)))
+  suppressMessages(suppressWarnings(library(dplyr)))
+  suppressMessages(suppressWarnings(library(httr)))
+  suppressMessages(suppressWarnings(library(jsonlite)))
+  suppressMessages(suppressWarnings(library(openxlsx)))
+  suppressMessages(suppressWarnings(library(rentrez)))
 allowWGCNAThreads() 
 
 
@@ -44,6 +50,7 @@ ui <- dashboardPage(
   dashboardHeader(title = "APIomics V1.0",titleWidth=250),
   dashboardSidebar(width = 250,
                    sidebarMenu(
+                     menuItem("Introduction", tabName = "intro"),
                      menuItem("Data Input", tabName = "data_input"),
                      menuItem("Preprocessing", tabName = "preprocessing"),
                      menuItem("Differential Expression", tabName = "deg_analysis"),
@@ -1779,3 +1786,4 @@ server <- function(input, output, session) {
 
 shinyApp(ui, server)
 
+}
