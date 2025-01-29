@@ -1,0 +1,47 @@
+Package: APIomics
+Type: Package
+Title: Bioinformatics Analysis Pipeline
+Version: 0.1.0
+Author: Morteza Hajihosseini
+Maintainer: Morteza Hajihosseini <mhajihos@ualberta.ca>
+Description: Bioinformatics Analysis Pipeline
+License: API
+Encoding: UTF-8
+LazyData: true
+Imports:
+    shinythemes,
+    shiny,
+    shinydashboard,
+    shinyjs,
+    limma,
+    edgeR,
+    clusterProfiler,
+    org.Hs.eg.db,
+    DT,
+    shinyalert,
+    gplots,
+    RColorBrewer,
+    plotly,
+    textshape,
+    radiant.data,
+    ggplot2,
+    ggheatmap,
+    WGCNA,
+    heatmaply,
+    ggdendro,
+    gridExtra,
+    magrittr,
+    tidyverse,
+    reshape2,
+    ggrepel,
+    ggraph,
+    igraph,
+    tidygraph,
+    ComplexHeatmap,
+    shinydashboardPlus,
+    corto,
+    dplyr,
+    httr,
+    jsonlite,
+    openxlsx,
+    rentrez
