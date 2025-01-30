@@ -314,17 +314,17 @@ ui <- dashboardPage(
                     p("Input Dataset Format: Make sure your samples are in the rows and genes in the columns.",
                       style = "font-size: 18px"),
                     p("preprocessing:",
-                      style = "font-size: 20px; font-weight: bold;"),
+                      style = "font-size: 20px; "),
                     p("Differential Expression:",
-                      style = "font-size: 20px; font-weight: bold;"),
+                      style = "font-size: 20px; "),
                     p("Gene Set Enrichment:",
-                      style = "font-size: 20px; font-weight: bold;"),
+                      style = "font-size: 20px; "),
                     p("Gene Regulators:",
-                      style = "font-size: 20px; font-weight: bold;"),
+                      style = "font-size: 20px; "),
                     p("Master Regulators:",
-                      style = "font-size: 20px; font-weight: bold;"),
+                      style = "font-size: 20px; "),
                     p("Search in PubMed & Clinical Trials:",
-                      style = "font-size: 20px; font-weight: bold;")
+                      style = "font-size: 20px; ")
                 )
               )
       )
