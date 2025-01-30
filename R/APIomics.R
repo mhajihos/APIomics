@@ -288,8 +288,7 @@ ui <- dashboardPage(
                     radioButtons("module_selection2", "Select Module", choices = c("Only for Gene Regulators")),
                     checkboxInput("show_debug", "Show debug info", FALSE),
                     checkboxInput("clinical_trial_only", "Limit PubMed Search to Clinical Trials", FALSE),
-                    actionButton("search", "Search Pubmed"),
-                    actionButton("search1", "Search Clinical Trials on the Disease"),
+                    actionButton("search", "Search Pubmed & Clinical Trials"),
                     downloadButton("download_results", "Download Pubmed Results as CSV"),
                     downloadButton("download_results1", "Download Clinical Trials Results as CSV"),
                     verbatimTextOutput("debug_info")
@@ -882,7 +881,7 @@ server <- function(input, output, session) {
       # Calculate the Topological Overlap Matrix (TOM)
       rv$TOM <- TOMsimilarity(adjacency)
       
-      incProgress(1, detail = "Complete")
+       incProgress(1, detail = "Complete")
       })
       
     }
@@ -1673,10 +1672,13 @@ server <- function(input, output, session) {
     }
   }
   
+  # Initialize reactive storage
+  rv_ct <- reactiveValues(results = NULL)
+  
   # Observer for search button
   observeEvent(input$search, {
     performSearch()
-  })
+  
   
   # Observer for clinical trials checkbox
   observeEvent(input$clinical_trial_only, {
@@ -1699,10 +1701,7 @@ server <- function(input, output, session) {
   
   
   # Clinical Trials
-  # Initialize reactive storage
-  rv_ct <- reactiveValues(results = NULL)
-  
-  observeEvent(input$search1, {
+
     req(input$disease_filter)
     
     if (is.null(input$disease_filter) || trimws(input$disease_filter) == "") {
