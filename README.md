@@ -9,7 +9,9 @@ if (!requireNamespace("BiocManager", quietly = TRUE))
     install.packages("BiocManager")
 
 BiocManager::install(c("limma", "edgeR", "clusterProfiler", "org.Hs.eg.db", "ComplexHeatmap","impute", "preprocessCore"))
+```
 
+## Installation the Package
 install.packages("devtools") 
 devtools::install_github("mhajihos/APIomics",force = TRUE)
 
