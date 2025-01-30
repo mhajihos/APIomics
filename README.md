@@ -11,7 +11,7 @@ if (!requireNamespace("BiocManager", quietly = TRUE))
 BiocManager::install(c("limma", "edgeR", "clusterProfiler", "org.Hs.eg.db", "ComplexHeatmap","impute", "preprocessCore"))
 
 install.packages("devtools") 
-devtools::install_github("mhajihos/APIomics")
+devtools::install_github("mhajihos/APIomics",force = TRUE)
 
 # Load the package
 library(APIomics)
