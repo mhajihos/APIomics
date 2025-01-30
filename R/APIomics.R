@@ -1158,7 +1158,6 @@ server <- function(input, output, session) {
   
   
   
-  # Gene Set Enrichment Tab (Placeholder plot and table)
   # Gene Set Enrichment Tab
   observeEvent(input$run_enrichment, {
     req(rv$deg_results)
@@ -1208,6 +1207,13 @@ server <- function(input, output, session) {
         shinyalert("Error", "Enrichment analysis failed. Check your input or database selection.")
       })
       incProgress(1, detail = "Complete")
+      
+      
+      # Check if results are empty
+      if (is.null(enrichment_results) || nrow(as.data.frame(enrichment_results)) == 0) {
+        shinyalert("No Results", "No significant enrichment terms were found. Try adjusting the p-value threshold or using a different gene set.", type = "warning")
+        return(NULL)
+      }
       
       # Save results and render outputs
       rv$enrichment_results <- enrichment_results
