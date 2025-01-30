@@ -9,6 +9,8 @@ License: API
 Encoding: UTF-8
 LazyData: true
 Imports:
+    BiocManager (>= 1.30.10),
+    RcppArmadillo,
     shinythemes,
     shiny,
     shinydashboard,
