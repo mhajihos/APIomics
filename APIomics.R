@@ -37,12 +37,19 @@ allowWGCNAThreads()
 
 
 
+
 # 1000 MB (1 GB) file size limit
 options(shiny.maxRequestSize = 1000 * 1024^2) 
 ui <- dashboardPage(
   #Bioinformatics Analysis Pipeline
-  dashboardHeader(title = "APIomics V1.0",titleWidth=250),
-  dashboardSidebar(width = 250,
+  dashboardHeader(title = "APIomics V1.0",
+                    titleWidth=250),
+                    dashboardSidebar(width = 250,
+                   tags$head(tags$style(HTML("
+                    .sidebar-menu > li > a {
+                    font-size: 16px !important; /* Adjust size as needed */
+                    }
+                      "))),
                    sidebarMenu(
                      menuItem("Introduction", tabName = "intro"),
                      menuItem("Data Input", tabName = "data_input"),
@@ -289,7 +296,23 @@ ui <- dashboardPage(
                        tabPanel("Clinical Trials Results", DTOutput("clinical_trials_table"))
                 )
               )
+      ),
+      
+      tabItem(tabName = "intro",
+              fluidRow(
+                box(title = "Welcome to APIomics", status = "primary", solidHeader = TRUE, width = 12,
+                    p("APIomics is a bioinformatics analysis pipeline designed to process and analyze high-throughput expression data.",
+                      style = "font-size: 20px; font-weight: bold;"),
+                    p("This tool enables users to perform preprocessing, differential expression analysis, gene set enrichment, regulatory network analysis, pubmed and clinical trial search.",
+                      style = "font-size: 18px;"),
+                    p("Navigate through the tabs to explore various functionalities and start your analysis.",
+                      style = "font-size: 18px;"),
+                    p("If you need help, please refer to the user guide or contact support. \nEmail:mortezaha.hajihosseini@appliedpharma.ca",
+                      style = "font-size: 18px;")
+                )
+              )
       )
+      
     )
   )
 )
