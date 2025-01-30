@@ -42,12 +42,12 @@ allowWGCNAThreads()
 options(shiny.maxRequestSize = 1000 * 1024^2) 
 ui <- dashboardPage(
   #Bioinformatics Analysis Pipeline
-  dashboardHeader(title = "APIomics V1.0",
-                    titleWidth=250),
-                    dashboardSidebar(width = 250,
+  dashboardHeader(title = "APIomics v1.0",
+                    titleWidth=300),
+                    dashboardSidebar(width = 300,
                    tags$head(tags$style(HTML("
                     .sidebar-menu > li > a {
-                    font-size: 16px !important; /* Adjust size as needed */
+                    font-size: 14px !important; /* Adjust size as needed */
                     }
                       "))),
                    sidebarMenu(
