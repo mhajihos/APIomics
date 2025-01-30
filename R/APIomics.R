@@ -114,15 +114,17 @@ ui <- dashboardPage(
                     selectInput("deg_method", "DEG Method",
                                 choices = c("edgeR-Count" = "edger",
                                             "limma-voom-Linear" = "voom")),
-                    numericInput("logfc_threshold", "Log Fold Change Threshold for Plots", 
-                                 value = 0.5, min = 0),
-                    numericInput("qvalue_threshold", "Adjusted_P-value Threshold for Plots", 
-                                 value = 0.05, min = 0, max = 1),
                     
                     # Horizontal layout for the Run button and Progress bar
                     fluidRow(
                       column(6, 
-                             actionButton("run_deg", "Run DEG Analysis")
+                             actionButton("run_deg", "Run DEG Analysis"),
+                             br(),
+                             br(),
+                             numericInput("logfc_threshold", "Log Fold Change Threshold for Plots", 
+                                          value = 0.5, min = 0),
+                             numericInput("qvalue_threshold", "Adjusted_P-value Threshold for Plots", 
+                                          value = 0.05, min = 0, max = 1),
                       ),
                       column(6, 
                              div(id = "progress_bar_container", style = "display:none; width: 100%;",
@@ -165,11 +167,14 @@ ui <- dashboardPage(
                                 choices = c("WGCNA" = "wgcna")),
                     selectInput("comparison_group2", "Select Comparison Group",
                                 choices = c("Choose after data input")),
+                    actionButton("find_regulators", "Find Regulators"),
+                    br(),
+                    br(),
                     radioButtons("module_selection", "Select Module", choices = c("To See Modules, Run Analysis First")),
                     numericInput("top_regulators", "Number of Top Genes for Plots", 
                                  value = 10, min = 1),
-                    uiOutput("group_filter_radio"),
-                    actionButton("find_regulators", "Find Regulators")
+                    uiOutput("group_filter_radio")
+                    
                     
                 ),
                 box(title = "Regulatory Network Results", status = "info", solidHeader = TRUE,
@@ -284,8 +289,8 @@ ui <- dashboardPage(
                     checkboxInput("show_debug", "Show debug info", FALSE),
                     checkboxInput("clinical_trial_only", "Limit PubMed Search to Clinical Trials", FALSE),
                     actionButton("search", "Search Pubmed"),
-                    downloadButton("download_results", "Download Pubmed Results as CSV"),
                     actionButton("search1", "Search Clinical Trials on the Disease"),
+                    downloadButton("download_results", "Download Pubmed Results as CSV"),
                     downloadButton("download_results1", "Download Clinical Trials Results as CSV"),
                     verbatimTextOutput("debug_info")
                 )
@@ -325,6 +330,8 @@ ui <- dashboardPage(
                     p("Master Regulators: The corto algorithm will run the gene network inference and master regulator analysis (MRA).",
                       style = "font-size: 20px; "),
                     p("Search in PubMed & Clinical Trials: In this section, you can call the result from DEG Analysis, Master Regulators, and WGCNA to search in the Pubmed and Clinical Trial databases.",
+                      style = "font-size: 20px; "),
+                    p("Note: For \"Search in PubMed & Clinical Trials\" make sure to specify a disease, otherwise the search is not running.",
                       style = "font-size: 20px; ")
                 )
               )
@@ -624,11 +631,18 @@ server <- function(input, output, session) {
         arrange(adj.P.Val) %>%
         head(20)
       
+      
       # Ensure we have genes
       if(nrow(top_genes) == 0) {
+        shinyalert(
+          title = "No Significant Genes Found",
+          text = "No DEGs were found based on the selected thresholds. Consider adjusting the log fold change or p-value thresholds.",
+          type = "warning",
+          confirmButtonText = "OK"
+        )
         return(NULL)
       }
-      
+ 
       # Prepare data for plotting
       # Extract only numeric columns and the group column
       numeric_cols <- names(rv$Normalized_data)[sapply(rv$Normalized_data, is.numeric)]
