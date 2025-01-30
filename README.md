@@ -11,13 +11,18 @@ BiocManager::install(c("limma", "edgeR", "clusterProfiler", "org.Hs.eg.db", "Com
 ```
 
 ### Install the Package
+```
 install.packages("devtools") 
 devtools::install_github("mhajihos/APIomics",force = TRUE)
+```
 
 ### Load the package
+```
 library(APIomics)
+```
 
 ### Launch the app
+```
 APIomics()
 ```
 ### Support
