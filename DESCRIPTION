@@ -8,17 +8,16 @@ Description: Bioinformatics Analysis Pipeline
 License: API
 Encoding: UTF-8
 LazyData: true
-Imports:
+Depends:
     BiocManager (>= 1.30.10),
+    R (>= 4.1)
+Imports:
+    BiocManager,
     RcppArmadillo,
     shinythemes,
     shiny,
     shinydashboard,
     shinyjs,
-    limma,
-    edgeR,
-    clusterProfiler,
-    org.Hs.eg.db,
     DT,
     shinyalert,
     gplots,
@@ -34,10 +33,15 @@ Imports:
     ggraph,
     igraph,
     tidygraph,
-    ComplexHeatmap,
     shinydashboardPlus,
     corto,
     dplyr,
     httr,
     jsonlite,
     rentrez
+Suggests:
+    limma,
+    edgeR,
+    clusterProfiler,
+    org.Hs.eg.db,
+    ComplexHeatmap
