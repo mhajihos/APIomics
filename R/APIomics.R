@@ -308,7 +308,11 @@ ui <- dashboardPage(
                     p("Navigate through the tabs to explore various functionalities and start your analysis.",
                       style = "font-size: 18px;"),
                     p("If you need help, please refer to the user guide or contact support. \nEmail:mortezaha.hajihosseini@appliedpharma.ca",
-                      style = "font-size: 18px;")
+                      style = "font-size: 18px;"),
+                    p("Instructions:",
+                      style = "font-size: 20px; font-weight: bold;"),
+                    p("Input Dataset Format: Make sure your samples are in the rows and genes in the columns.",
+                      style = "font-size: 18px")
                 )
               )
       )
