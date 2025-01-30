@@ -4,6 +4,12 @@ APIomics is a bioinformatics analysis pipeline designed to process and analyze h
 
 ## Installation, Loading, Launching
 ```
+# Install Bioconductor dependencies
+if (!requireNamespace("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+
+BiocManager::install(c("limma", "edgeR", "clusterProfiler", "org.Hs.eg.db", "ComplexHeatmap"))
+
 install.packages("devtools") 
 devtools::install_github("mhajihos/APIomics")
 
