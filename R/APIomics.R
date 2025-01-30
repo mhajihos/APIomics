@@ -846,7 +846,7 @@ server <- function(input, output, session) {
         
         
         
-        incProgress(0.6, detail = "Generating Module Eigengenes")
+        incProgress(0.3, detail = "Generating Module Eigengenes")
         
         module_eigengenes <- netwk$MEs
         module_colors <- labels2colors(netwk$colors)
@@ -867,9 +867,9 @@ server <- function(input, output, session) {
         
         
         module_df_melt=melt(module_df,id.vars=c("Samples","Group"))
-        incProgress(1, detail = "Complete")
-      })
+       
       
+      incProgress(0.3, detail = "Calculate the Topological Overlap Matrix")
       gene_module_key <- tibble::enframe(netwk$colors, name = "gene", value = "module") %>%
         # Let's add the `ME` part so its more clear what these numbers are and it matches elsewhere
         dplyr::mutate(module =labels2colors(netwk$colors))
@@ -882,6 +882,8 @@ server <- function(input, output, session) {
       # Calculate the Topological Overlap Matrix (TOM)
       rv$TOM <- TOMsimilarity(adjacency)
       
+      incProgress(1, detail = "Complete")
+      })
       
     }
     
