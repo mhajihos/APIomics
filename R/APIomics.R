@@ -33,6 +33,8 @@ APIomics<-function()
   suppressMessages(suppressWarnings(library(httr)))
   suppressMessages(suppressWarnings(library(jsonlite)))
   suppressMessages(suppressWarnings(library(rentrez)))
+  suppressMessages(suppressWarnings(library(DOSE)))
+  suppressMessages(suppressWarnings(library(visNetwork)))
 allowWGCNAThreads() 
 
 
@@ -46,7 +48,7 @@ ui <- dashboardPage(
     title = div(
       HTML('<svg width="40" height="40" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
                 <circle cx="50" cy="50" r="45" fill="#007bff"/>
-                <text x="50" y="60" text-anchor="middle" fill="white" font-size="30" font-weight="bold">A</text>
+                <text x="50" y="60" text-anchor="middle" fill="white" font-size="30" font-weight="bold">API</text>
             </svg>'),
       span("APIomics v1.0", style = "margin-left: 10px; font-weight: 600; color: #333;"),
       style = "display: flex; align-items: center; font-size: 22px;"
@@ -109,14 +111,16 @@ ui <- dashboardPage(
     ),
     sidebarMenu(
       id = "sidebar",
-      menuItem("Dashboard", tabName = "intro", icon = icon("home")),
-      menuItem("Data Input", tabName = "data_input", icon = icon("cloud-upload-alt")),
-      menuItem("Preprocessing", tabName = "preprocessing", icon = icon("filter")),
-      menuItem("Differential Expression", tabName = "deg_analysis", icon = icon("chart-line")),
-      menuItem("Gene Enrichment", tabName = "geneset_enrichment", icon = icon("dna")),
-      menuItem("Gene Regulators", tabName = "gene_regulators", icon = icon("network-wired")),
-      menuItem("Master Regulators", tabName = "master_regulators", icon = icon("brain")),
-      menuItem("Literature Search", tabName = "pubmed_search", icon = icon("search-plus"))
+      menuItem("Dashboard", tabName = "intro", icon = icon("tachometer-alt")),  
+      menuItem("Data Input", tabName = "data_input", icon = icon("file-upload")), 
+      menuItem("Preprocessing", tabName = "preprocessing", icon = icon("cogs")),  
+      menuItem("Differential Expression", tabName = "deg_analysis", icon = icon("chart-bar")), 
+      menuItem("Gene Enrichment", tabName = "geneset_enrichment", icon = icon("flask")),  
+      menuItem("Gene Regulators", tabName = "gene_regulators", icon = icon("project-diagram")), 
+      menuItem("Master Regulators", tabName = "master_regulators", icon = icon("user-cog")),  
+      menuItem("Literature Search", tabName = "pubmed_search", icon = icon("book-open")),  
+      menuItem("Gene Disease Network", tabName = "gene_disease_network", icon = icon("sitemap"))  
+      
     )
   ),
   dashboardBody(
@@ -299,7 +303,7 @@ ui <- dashboardPage(
       # Gene Set MRA Tab
       tabItem(tabName = "master_regulators",
               fluidRow(
-                box(title = "Master Regulators Analysis", status = "primary", solidHeader = TRUE,
+                box(title = "Master Regulators Analysis", status = "primary", solidHeader = TRUE, width = 12,
                     selectInput("MRA_type", "MRA Type",
                                 choices = c("Corto" = "corto")),
                     numericInput("logfc_threshold2", "Log Fold Change Threshold for Gene List", 
@@ -309,20 +313,24 @@ ui <- dashboardPage(
                     selectInput("mra_group", "Select Group of Interest:",
                                 choices = NULL),
                     actionButton("run_mra", "Run MRA")
-                )),
-              fluidRow(
-                box(title = "List of All Master Regulators", status = "success", solidHeader = TRUE,collapsible = TRUE,
-                    DTOutput("mra_table"),
-                    downloadButton("download_mra_table", "Download MRA Results")
-                ),
-                box(title = "Top 5 Master Regulators", status = "success", solidHeader = TRUE,collapsible = TRUE,
-                    plotOutput("mra_plot1", height = 600),
-                    sliderInput("mra_plot2_width", "Width (inches)", min = 4, max = 20, value = 8,width='400px'),
-                    sliderInput("mra_plot2_height", "Height (inches)", min = 4, max = 20, value = 8,width='400px'),
-                    numericInput("mra_plot2_res", "Resolution (dpi)", value = 300, min = 100),
-                    downloadButton("download_mra_plot1", "Download MRA Plot (TIFF)")
                 )
-                
+              ),
+              fluidRow(
+                column(width = 6,
+                       box(title = "List of All Master Regulators", status = "success", solidHeader = TRUE, collapsible = TRUE, width = 12,
+                           DTOutput("mra_table"),
+                           downloadButton("download_mra_table", "Download MRA Results")
+                       )
+                ),
+                column(width = 6,
+                       box(title = "Top 5 Master Regulators", status = "success", solidHeader = TRUE, collapsible = TRUE, width = 12,
+                           plotOutput("mra_plot1", height = "600px"),
+                           sliderInput("mra_plot2_width", "Width (inches)", min = 4, max = 20, value = 8, width='400px'),
+                           sliderInput("mra_plot2_height", "Height (inches)", min = 4, max = 20, value = 8, width='400px'),
+                           numericInput("mra_plot2_res", "Resolution (dpi)", value = 300, min = 100),
+                           downloadButton("download_mra_plot1", "Download MRA Plot (TIFF)")
+                       )
+                )
               )
       ),
       
@@ -356,6 +364,43 @@ ui <- dashboardPage(
               )
       ),
       
+      
+      #Gene Disease Network Tab
+      tabItem(tabName = "gene_disease_network",
+              fluidRow(
+                box(title = "Gene Disease Network Analysis", status = "primary", solidHeader = TRUE, width = 12,
+                    selectInput("gene_source", "Select Source of Genes:",
+                                choices = c("DEG Analysis" = "deg",
+                                            "Master Regulators" = "mra",
+                                            "Gene Regulators (WGCNA)" = "wgcna")),
+                    numericInput("qvalue_threshold_DEGEN", "q-value Threshold for the Results", 
+                                 value = 0.05, min = 0, max = 1),
+                    uiOutput("module_selection"),
+                    radioButtons("module_selection3", "Select Module", choices = c("Only for Gene Regulators")),
+                    sliderInput("centrality_filter", "Filter Nodes by Centrality:", min = 0, max = 1, value = 0.5, step = 0.05),
+                    sliderInput("top_n_results", "Top N Diseases for Network:", min = 1, max = 50, value = 10, step = 1),
+                    actionButton("run_disease_network", "Run Analysis")
+                )
+              ),
+              fluidRow(
+                column(width = 6,
+                       box(title = "Disease Enrichment Results", status = "info", solidHeader = TRUE, width = 12,
+                           DTOutput("disease_enrichment_table"),
+                           downloadButton("download_disease_results", "Download Results")
+                       )
+                ),
+                column(width = 6,
+                       box(title = "Disease-Gene Network", status = "success", solidHeader = TRUE, width = 12,
+                           visNetworkOutput("disease_network_plot", height = "600px"),
+                           sliderInput("dn_plot_width", "Width (inches)", min = 4, max = 20, value = 8, width='400px'),
+                           sliderInput("dn_plot_height", "Height (inches)", min = 4, max = 20, value = 8, width='400px'),
+                           numericInput("dn_plot_res", "Resolution (dpi)", value = 300, min = 100),
+                           downloadButton("download_disease_network", "Download Network (TIFF)")
+                       )
+                )
+              )
+      ),
+      
       tabItem(tabName = "intro",
               fluidRow(
                 box(title = "Welcome to APIomics", status = "primary", solidHeader = TRUE, width = 12,
@@ -383,7 +428,10 @@ ui <- dashboardPage(
                     p("Master Regulators: The corto algorithm will run the gene network inference and master regulator analysis (MRA).",
                       style = "font-size: 14px; "),
                     p("Search in PubMed & Clinical Trials: In this section, you can call the result from DEG Analysis, Master Regulators, and WGCNA to search in the Pubmed and Clinical Trial databases.",
+                      style = "font-size: 14px; "),
+                    p("Gene Disease Network: In this section, you can call the result from DEG Analysis, Master Regulators, and WGCNA to find the connections for various diseases using the DISGENET database. \nDisGeNET is a discovery platform for the dynamical exploration of human diseases and their genes",
                       style = "font-size: 14px; ")
+                    
                 )
               )
       )
@@ -1889,6 +1937,149 @@ server <- function(input, output, session) {
       write.csv(rv_ct$results, file, row.names = FALSE)
     }
   )
+  
+  
+  
+  
+  
+  observe({
+    req(input$gene_source)
+    if(input$gene_source=="wgcna") 
+    {
+      req(rv$module_colors)
+      updateRadioButtons(
+        session, 
+        "module_selection3", 
+        choices = rv$module_colors
+      )}
+  })
+  
+  
+  #Gene Disease Network Analysis
+  observeEvent(input$run_disease_network, {
+    req(input$gene_source)
+    
+    
+    withProgress(message = 'Running Gene Disease Network Analysis...', value = 0, {
+    gene_list <- NULL
+    if (input$gene_source == "deg") {
+      req(rv$deg_results)
+      gene_list <- rownames(rv$deg_results)
+    } else if (input$gene_source == "mra") {
+      req(rv$mra_results)
+      gene_list <- rv$mra_results[,1]
+    } else if (input$gene_source == "wgcna") {
+      req(rv$wgcna_modules)
+      req(input$module_selection3)
+      gene_list <-  rv$wgcna_modules %>%
+        filter(module == input$module_selection3) %>%
+        pull(gene)
+    }
+    
+
+    incProgress(0.2, detail = "Mapping gene IDs")
+    entrez_ids <- mapIds(org.Hs.eg.db, keys = gene_list, column = "ENTREZID", keytype = "SYMBOL", multiVals = "first")
+    disease_enrichment <- enrichDGN(gene = entrez_ids, pvalueCutoff = 0.05, pAdjustMethod = "BH")
+    
+    incProgress(0.4, detail = "Performing disease enrichment")
+    sig_results <- disease_enrichment@result[disease_enrichment@result$p.adjust < input$qvalue_threshold_DEGEN, ]
+    sig_results <- sig_results[1:min(input$top_n_results, nrow(sig_results)), ]
+    
+    incProgress(0.6, detail = "Building network edges")
+    edges <- data.frame()
+    for (i in 1:nrow(sig_results)) {
+      genes_in_term <- strsplit(sig_results$geneID[i], "/")[[1]]
+      disease <- sig_results$Description[i]
+      
+      gene_symbols <- sapply(genes_in_term, function(id) {
+        symbol <- names(entrez_ids)[which(entrez_ids == id)]
+        if (length(symbol) == 0) return(id)
+        return(symbol[1])
+      })
+      
+      edge_data <- data.frame(
+        source = gene_symbols,
+        target = disease,
+        weight = -log10(sig_results$p.adjust[i]),
+        stringsAsFactors = FALSE
+      )
+      edges <- rbind(edges, edge_data)
+    }
+    
+    edges <- na.omit(edges)  # Remove NA entries
+    edges <- edges[!duplicated(edges), ]  # Ensure no duplicates
+    edges$weight <- as.numeric(edges$weight)
+    
+    # Ensure edges length matches unique sources/targets
+    if (nrow(edges) != length(unique(c(edges$source, edges$target)))) {
+      edges <- edges[1:min(nrow(edges), length(unique(c(edges$source, edges$target)))), ]
+    }
+    
+    incProgress(0.8, detail = "Creating graph")
+    network <- graph_from_data_frame(edges[1:min(nrow(edges), nrow(edges)), ], directed = FALSE)
+    centrality_metrics <- data.frame(
+      node = V(network)$name,
+      degree = degree(network),
+      betweenness = betweenness(network),
+      closeness = closeness(network)
+    )
+    network <- delete.vertices(network, V(network)$name[centrality_metrics$betweenness < input$centrality_filter])
+    
+    V(network)$type <- ifelse(V(network)$name %in% gene_list, "gene", "disease")
+    V(network)$color <- ifelse(V(network)$type == "gene", "#A8D5E2", "#F9A7B0")
+    V(network)$size <- ifelse(V(network)$type == "gene", 12, 18)
+    V(network)$label.color <- "black"
+   
+    if (length(E(network)) == nrow(edges)) {
+      E(network)$width <- edges$weight / max(edges$weight) * 2
+    } else {
+      warning("Mismatch between edges and network. Skipping weight assignment.")
+    }
+    
+    
+    incProgress(1, detail = "Rendering network")
+    output$disease_network_plot <- renderVisNetwork({
+      # Convert igraph to visNetwork format
+      nodes <- data.frame(id = V(network)$name,
+                          label = V(network)$name,
+                          color = ifelse(V(network)$type == "gene", "#A8D5E2", "#F9A7B0"),
+                          size = ifelse(V(network)$type == "gene", 12, 18))
+      
+      edges <- data.frame(from = edges$source,
+                          to = edges$target,
+                          width = edges$weight / max(edges$weight) * 5)  # Scale edge weights
+      
+      visNetwork(nodes, edges) %>%
+        visOptions(highlightNearest = TRUE, nodesIdSelection = TRUE) %>%
+        visInteraction(zoomView = TRUE, dragNodes = TRUE, dragView = TRUE) %>%
+        visPhysics(enabled = TRUE)
+    })
+    
+    
+    output$disease_enrichment_table <- renderDT({
+      datatable(disease_enrichment@result, options = list(scrollX = TRUE))
+    })
+    
+    output$download_disease_results <- downloadHandler(
+      filename = function() { paste("disease_enrichment_results", Sys.Date(), ".csv", sep = "") },
+      content = function(file) { write.csv(disease_enrichment@result, file, row.names = FALSE) }
+    )
+    
+    output$download_disease_network <- downloadHandler(
+      filename = function() { paste("disease_network", Sys.Date(), ".tiff", sep = "") },
+      content = function(file) {
+        width <- input$dn_plot_width
+        height <- input$dn_plot_height
+        res <- input$dn_plot_res
+        tiff(file, width = width, height = height, units = "in", res = res)
+        plot(network, layout = layout_with_fr, vertex.label.cex = 0.9, vertex.frame.color = "darkgray", edge.curved = 0.3, edge.color = "gray70")
+        dev.off()
+      }
+    )
+  })
+  })
+
+  
 }
 
 shinyApp(ui, server)
