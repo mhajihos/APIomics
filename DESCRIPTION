@@ -38,7 +38,8 @@ Imports:
     dplyr,
     httr,
     jsonlite,
-    rentrez
+    rentrez,
+    visNetwork
 Suggests:
     limma,
     edgeR,
