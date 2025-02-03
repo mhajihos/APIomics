@@ -7,7 +7,7 @@ APIomics is a bioinformatics analysis pipeline designed to process and analyze h
 if (!requireNamespace("BiocManager", quietly = TRUE))
     install.packages("BiocManager")
 
-BiocManager::install(c("limma", "edgeR", "clusterProfiler", "org.Hs.eg.db", "ComplexHeatmap","impute", "preprocessCore"))
+BiocManager::install(c("limma", "edgeR", "clusterProfiler", "org.Hs.eg.db", "ComplexHeatmap","impute", "preprocessCore","DOSE"))
 ```
 
 ## Install the Package
