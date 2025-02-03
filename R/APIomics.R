@@ -115,7 +115,7 @@ ui <- dashboardPage(
       menuItem("Data Input", tabName = "data_input", icon = icon("file-upload")), 
       menuItem("Preprocessing", tabName = "preprocessing", icon = icon("cogs")),  
       menuItem("Differential Expression", tabName = "deg_analysis", icon = icon("chart-bar")), 
-      menuItem("Gene Enrichment", tabName = "geneset_enrichment", icon = icon("flask")),  
+      menuItem("Gene Set Enrichment", tabName = "geneset_enrichment", icon = icon("flask")),  
       menuItem("Gene Regulators", tabName = "gene_regulators", icon = icon("project-diagram")), 
       menuItem("Master Regulators", tabName = "master_regulators", icon = icon("user-cog")),  
       menuItem("Literature Search", tabName = "pubmed_search", icon = icon("book-open")),  
@@ -403,7 +403,7 @@ ui <- dashboardPage(
       
       tabItem(tabName = "intro",
               fluidRow(
-                box(title = "Welcome to APIomics", status = "primary", solidHeader = TRUE, width = 12,
+                box(title = "Welcome to APIomics", status = "primary", solidHeader = TRUE, width = 12, height = "100%",
                     p("APIomics is a bioinformatics analysis pipeline designed to process and analyze high-throughput expression data.",
                       style = "font-size: 16px; font-weight: bold;"),
                     p("This tool enables users to perform preprocessing, differential expression analysis, gene set enrichment, regulatory network analysis, pubmed and clinical trial search.",
@@ -421,16 +421,17 @@ ui <- dashboardPage(
                       style = "font-size: 14px; "),
                     p("Differential Expression: The DEG analysis can be done on the raw counts or normalized data. The combination of Log Fold Change Threshold (more than) and Adjusted_P-value Threshold (less than) will be used to summerize the data for the plots.",
                       style = "font-size: 14px; "),
-                    p("Gene Set Enrichment: The GSEA will use the gene list from DEG analysis to perform gene set enrichment analysis using four different human spicy databases.",
+                    p("Gene Set Enrichment (GSEA): The GSEA will use the gene list from DEG analysis to perform gene set enrichment analysis using four different human spicy databases.",
                       style = "font-size: 14px; "),
-                    p("Gene Regulators: The weighted gene co-expression network analysis (WGCNA) is a widely used method for describing the correlation patterns of genes across a large set of samples.",
+                    p("Gene Regulators (WGCNA): The weighted gene co-expression network analysis (WGCNA) is a widely used method for describing the correlation patterns of genes across a large set of samples.",
                       style = "font-size: 14px; "),
-                    p("Master Regulators: The corto algorithm will run the gene network inference and master regulator analysis (MRA).",
+                    p("Master Regulators (Corto): The corto algorithm will run the gene network inference and master regulator analysis (MRA).",
                       style = "font-size: 14px; "),
                     p("Search in PubMed & Clinical Trials: In this section, you can call the result from DEG Analysis, Master Regulators, and WGCNA to search in the Pubmed and Clinical Trial databases.",
                       style = "font-size: 14px; "),
                     p("Gene Disease Network: In this section, you can call the result from DEG Analysis, Master Regulators, and WGCNA to find the connections for various diseases using the DISGENET database. \nDisGeNET is a discovery platform for the dynamical exploration of human diseases and their genes",
-                      style = "font-size: 14px; ")
+                      style = "font-size: 14px; "),
+                    img(src = "static/flowchart.png", width = "100%")
                     
                 )
               )
@@ -446,6 +447,9 @@ ui <- dashboardPage(
 
 server <- function(input, output, session) {
   # Reactive values to store data across tabs
+
+
+
   rv <- reactiveValues(
     raw_data = NULL,
     preprocessed_data = NULL,
