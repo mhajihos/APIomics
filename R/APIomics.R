@@ -41,30 +41,90 @@ allowWGCNAThreads()
 # 1000 MB (1 GB) file size limit
 options(shiny.maxRequestSize = 1000 * 1024^2) 
 ui <- dashboardPage(
-  #Bioinformatics Analysis Pipeline
-  dashboardHeader(title = "APIomics v1.0",
-                    titleWidth=300),
-                    dashboardSidebar(width = 300,
-                   tags$head(tags$style(HTML("
-                    .sidebar-menu > li > a {
-                    font-size: 14px !important; /* Adjust size as needed */
-                    }
-                      "))),
-                   sidebarMenu(
-                     menuItem("Introduction", tabName = "intro"),
-                     menuItem("Data Input", tabName = "data_input"),
-                     menuItem("Preprocessing", tabName = "preprocessing"),
-                     menuItem("Differential Expression", tabName = "deg_analysis"),
-                     menuItem("Gene Set Enrichment", tabName = "geneset_enrichment"),
-                     menuItem("Gene Regulators", tabName = "gene_regulators"),
-                     menuItem("Master Regulators", tabName = "master_regulators"),
-                     menuItem("Search in PubMed & Clinical Trials", tabName = "pubmed_search")
-                     
-                   )
+  skin = "black",
+  dashboardHeader(
+    title = div(
+      HTML('<svg width="40" height="40" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="50" cy="50" r="45" fill="#007bff"/>
+                <text x="50" y="60" text-anchor="middle" fill="white" font-size="30" font-weight="bold">A</text>
+            </svg>'),
+      span("APIomics v1.0", style = "margin-left: 10px; font-weight: 600; color: #333;"),
+      style = "display: flex; align-items: center; font-size: 22px;"
+    ),
+    titleWidth = 250,
+    tags$li(
+      class = "dropdown",
+      style = "padding: 10px;",
+      actionButton("theme_toggle", label = NULL, icon = icon("adjust"), 
+                   style = "background: none; border: none; color: #007bff;")
+    )
+  ),
+  dashboardSidebar(
+    width = 250,
+    tags$head(
+      tags$style(HTML("
+                :root {
+                    --primary-color: #007bff;
+                    --secondary-color: #6c757d;
+                    --background-light: #f8f9fa;
+                    --background-dark: #343a40;
+                }
+                body {
+                    font-family: 'Inter', 'Roboto', sans-serif;
+                    transition: background-color 0.3s, color 0.3s;
+                }
+                .skin-black .sidebar {
+                    background-color: var(--background-light);
+                    border-right: 1px solid #e9ecef;
+                }
+                .sidebar-menu li a {
+                    font-size: 15px;
+                    font-weight: 500;
+                    color: var(--secondary-color);
+                    border-radius: 8px;
+                    margin: 5px;
+                    transition: all 0.3s ease;
+                }
+                .sidebar-menu li a:hover {
+                    background-color: rgba(0,123,255,0.1);
+                    color: var(--primary-color);
+                }
+                .sidebar-menu .active a {
+                    background-color: var(--primary-color);
+                    color: white !important;
+                }
+                .main-header {
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                }
+                .box {
+                    border-radius: 12px;
+                    box-shadow: 0 4px 6px rgba(0,0,0,0.08);
+                    border: none;
+                }
+                .box-header {
+                    background-color: transparent;
+                    border-bottom: 1px solid #e9ecef;
+                }
+            "))
+    ),
+    sidebarMenu(
+      id = "sidebar",
+      menuItem("Dashboard", tabName = "intro", icon = icon("home")),
+      menuItem("Data Input", tabName = "data_input", icon = icon("cloud-upload-alt")),
+      menuItem("Preprocessing", tabName = "preprocessing", icon = icon("filter")),
+      menuItem("Differential Expression", tabName = "deg_analysis", icon = icon("chart-line")),
+      menuItem("Gene Enrichment", tabName = "geneset_enrichment", icon = icon("dna")),
+      menuItem("Gene Regulators", tabName = "gene_regulators", icon = icon("network-wired")),
+      menuItem("Master Regulators", tabName = "master_regulators", icon = icon("brain")),
+      menuItem("Literature Search", tabName = "pubmed_search", icon = icon("search-plus"))
+    )
   ),
   dashboardBody(
     useShinyjs(),
-    useShinyalert(force = TRUE), 
+    useShinyalert(force = TRUE),
+    tags$head(
+      tags$link(href = "https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap", rel = "stylesheet")
+    ),
     tabItems(
       # Data Input Tab
       tabItem(tabName = "data_input",
@@ -114,17 +174,15 @@ ui <- dashboardPage(
                     selectInput("deg_method", "DEG Method",
                                 choices = c("edgeR-Count" = "edger",
                                             "limma-voom-Linear" = "voom")),
+                    numericInput("logfc_threshold", "Log Fold Change Threshold for Plots", 
+                                 value = 0.5, min = 0),
+                    numericInput("qvalue_threshold", "Adjusted_P-value Threshold for Plots", 
+                                 value = 0.05, min = 0, max = 1),
                     
                     # Horizontal layout for the Run button and Progress bar
                     fluidRow(
                       column(6, 
-                             actionButton("run_deg", "Run DEG Analysis"),
-                             br(),
-                             br(),
-                             numericInput("logfc_threshold", "Log Fold Change Threshold for Plots", 
-                                          value = 0.5, min = 0),
-                             numericInput("qvalue_threshold", "Adjusted_P-value Threshold for Plots", 
-                                          value = 0.05, min = 0, max = 1),
+                             actionButton("run_deg", "Run DEG Analysis")
                       ),
                       column(6, 
                              div(id = "progress_bar_container", style = "display:none; width: 100%;",
@@ -167,14 +225,11 @@ ui <- dashboardPage(
                                 choices = c("WGCNA" = "wgcna")),
                     selectInput("comparison_group2", "Select Comparison Group",
                                 choices = c("Choose after data input")),
-                    actionButton("find_regulators", "Find Regulators"),
-                    br(),
-                    br(),
                     radioButtons("module_selection", "Select Module", choices = c("To See Modules, Run Analysis First")),
                     numericInput("top_regulators", "Number of Top Genes for Plots", 
                                  value = 10, min = 1),
-                    uiOutput("group_filter_radio")
-                    
+                    uiOutput("group_filter_radio"),
+                    actionButton("find_regulators", "Find Regulators")
                     
                 ),
                 box(title = "Regulatory Network Results", status = "info", solidHeader = TRUE,
@@ -286,9 +341,8 @@ ui <- dashboardPage(
                                             "MeSH Terms" = "[MeSH Terms]"), 
                                 selected = "[Title/Abstract]"),
                     radioButtons("module_selection2", "Select Module", choices = c("Only for Gene Regulators")),
-                    checkboxInput("show_debug", "Show debug info", FALSE),
                     checkboxInput("clinical_trial_only", "Limit PubMed Search to Clinical Trials", FALSE),
-                    actionButton("search", "Search Pubmed & Clinical Trials"),
+                    actionButton("search", "Search in Pubmed & Clinical Trials"),
                     downloadButton("download_results", "Download Pubmed Results as CSV"),
                     downloadButton("download_results1", "Download Clinical Trials Results as CSV"),
                     verbatimTextOutput("debug_info")
@@ -306,32 +360,30 @@ ui <- dashboardPage(
               fluidRow(
                 box(title = "Welcome to APIomics", status = "primary", solidHeader = TRUE, width = 12,
                     p("APIomics is a bioinformatics analysis pipeline designed to process and analyze high-throughput expression data.",
-                      style = "font-size: 20px; font-weight: bold;"),
+                      style = "font-size: 16px; font-weight: bold;"),
                     p("This tool enables users to perform preprocessing, differential expression analysis, gene set enrichment, regulatory network analysis, pubmed and clinical trial search.",
-                      style = "font-size: 18px;"),
+                      style = "font-size: 14px;"),
                     p("Navigate through the tabs to explore various functionalities and start your analysis.",
-                      style = "font-size: 18px;"),
-                    p("If you need help, please refer to the user guide or contact support. \nEmail:mortezaha.hajihosseini@appliedpharma.ca",
-                      style = "font-size: 18px;"),
+                      style = "font-size: 14px;"),
+                    p("If you need help, please refer to the user guide or contact support. \nEmail:morteza.hajihosseini@appliedpharma.ca",
+                      style = "font-size: 14px;"),
                     p(br()),
                     p("Instructions:",
-                      style = "font-size: 20px; font-weight: bold;"),
+                      style = "font-size: 16px; font-weight: bold;"),
                     p("Input Dataset Format: Make sure your samples are in the rows and genes in the columns. It is important to have the condition (grouping) variable at the end of the file as the last column.",
-                      style = "font-size: 18px"),
+                      style = "font-size: 14px"),
                     p("Preprocessing: The preprocessing step performs the normalization and low count filtering.",
-                      style = "font-size: 20px; "),
+                      style = "font-size: 14px; "),
                     p("Differential Expression: The DEG analysis can be done on the raw counts or normalized data. The combination of Log Fold Change Threshold (more than) and Adjusted_P-value Threshold (less than) will be used to summerize the data for the plots.",
-                      style = "font-size: 20px; "),
+                      style = "font-size: 14px; "),
                     p("Gene Set Enrichment: The GSEA will use the gene list from DEG analysis to perform gene set enrichment analysis using four different human spicy databases.",
-                      style = "font-size: 20px; "),
+                      style = "font-size: 14px; "),
                     p("Gene Regulators: The weighted gene co-expression network analysis (WGCNA) is a widely used method for describing the correlation patterns of genes across a large set of samples.",
-                      style = "font-size: 20px; "),
+                      style = "font-size: 14px; "),
                     p("Master Regulators: The corto algorithm will run the gene network inference and master regulator analysis (MRA).",
-                      style = "font-size: 20px; "),
+                      style = "font-size: 14px; "),
                     p("Search in PubMed & Clinical Trials: In this section, you can call the result from DEG Analysis, Master Regulators, and WGCNA to search in the Pubmed and Clinical Trial databases.",
-                      style = "font-size: 20px; "),
-                    p("Note: For \"Search in PubMed & Clinical Trials\" make sure to specify a disease, otherwise the search is not running.",
-                      style = "font-size: 20px; ")
+                      style = "font-size: 14px; ")
                 )
               )
       )
@@ -1790,7 +1842,7 @@ server <- function(input, output, session) {
     print("Results stored in rv_ct$results")
   })
   
-  # Render DataTable
+
   # Render Clinical Trials DataTable with Clickable Links
   output$clinical_trials_table <- renderDT({
     req(rv_ct$results)  # Ensure results exist
