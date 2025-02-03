@@ -25,6 +25,10 @@ library(APIomics)
 ```
 APIomics()
 ```
+
+
+![Flowchart]([https://github.com/username/repository-name/raw/main/path/to/your-image.png](https://github.com/mhajihos/APIomics/blob/master/www/flowchart_test.png))
+
 ## Support
 If you need help, please refer to the user guide or contact support. Email:mortezaha.hajihosseini@appliedpharma.ca
 
