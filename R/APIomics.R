@@ -38,7 +38,7 @@ APIomics<-function()
 allowWGCNAThreads() 
 
 
-
+addResourcePath("static", "www")
 
 # 1000 MB (1 GB) file size limit
 options(shiny.maxRequestSize = 1000 * 1024^2) 
@@ -431,7 +431,8 @@ ui <- dashboardPage(
                       style = "font-size: 14px; "),
                     p("Gene Disease Network: In this section, you can call the result from DEG Analysis, Master Regulators, and WGCNA to find the connections for various diseases using the DISGENET database. \nDisGeNET is a discovery platform for the dynamical exploration of human diseases and their genes",
                       style = "font-size: 14px; "),
-                    img(src = "static/flowchart.png", width = "100%")
+                    img(src = "static/flow.jpg",height="50%", width="50%", align="left")
+                    
                     
                 )
               )
