@@ -27,7 +27,7 @@ APIomics()
 ```
 
 
-![The Pipeline](https://github.com/mhajihos/APIomics/blob/7d9b168b733e5aff3baefbee8e166ac0b150587b/www/fLowchart.jpg)
+![The Pipeline](https://github.com/mhajihos/APIomics/blob/37476562660697ae0d72df3923ef986707a82376/www/fLowchart.jpg)
 
 ## Support
 If you need help, please refer to the user guide or contact support. Email:morteza.hajihosseini@appliedpharma.ca
