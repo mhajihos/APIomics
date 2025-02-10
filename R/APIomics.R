@@ -162,7 +162,8 @@ ui <- dashboardPage(
                     actionButton("preprocess_data", "Run Preprocessing")
                 ),
                 box(title = "Preprocessing Results", status = "info", solidHeader = TRUE,
-                    DTOutput("preprocessed_data")
+                    DTOutput("preprocessed_data"),
+                    downloadButton("download_preprocessed", "Download Preprocessed Data")
                 )
               )
       ),
@@ -172,13 +173,13 @@ ui <- dashboardPage(
               fluidRow(
                 useShinyjs(),
                 box(title = "DEG Analysis Setup", status = "primary", solidHeader = TRUE,
-                    
+                    selectInput("data_type", "Select Data Type", choices = c("Raw Count Data" = "raw", "Preprocessed Data" = "processed")),
+                    selectInput("deg_method", "DEG Method",
+                                choices = c("edgeR-Count" = "edger",
+                                            "limma-voom" = "voom")),
                     selectInput("comparison_group", "Select Comparison Group",
                                 choices = c("Choose after data input")),
                     
-                    selectInput("deg_method", "DEG Method",
-                                choices = c("edgeR-Count" = "edger",
-                                            "limma-voom-Linear" = "voom")),
                     numericInput("logfc_threshold", "Log Fold Change Threshold for Plots", 
                                  value = 0.5, min = 0),
                     numericInput("qvalue_threshold", "Adjusted_P-value Threshold for Plots", 
@@ -228,6 +229,7 @@ ui <- dashboardPage(
                 box(title = "Regulatory Network Analysis", status = "primary", solidHeader = TRUE,
                     selectInput("regulator_method", "Regulatory Analysis Method",
                                 choices = c("WGCNA" = "wgcna")),
+                    selectInput("data_type_reg", "Select Data Type", choices = c("Raw Count Data" = "raw", "Preprocessed Data" = "processed")),
                     selectInput("comparison_group2", "Select Comparison Group",
                                 choices = c("Choose after data input")),
                     radioButtons("module_selection", "Select Module", choices = c("To See Modules, Run Analysis First")),
@@ -307,6 +309,7 @@ ui <- dashboardPage(
                 box(title = "Master Regulators Analysis", status = "primary", solidHeader = TRUE, width = 12,
                     selectInput("MRA_type", "MRA Type",
                                 choices = c("Corto" = "corto")),
+                    selectInput("data_type_mra", "Select Data Type", choices = c("Raw Count Data" = "raw", "Preprocessed Data" = "processed")),
                     numericInput("logfc_threshold2", "Log Fold Change Threshold for Gene List", 
                                  value = 0.5, min = 0),
                     numericInput("qvalue_threshold2", "Adjusted_P-value Threshold for Gene List", 
@@ -458,6 +461,7 @@ server <- function(input, output, session) {
     raw_data = NULL,
     preprocessed_data = NULL,
     Normalized_data=NULL,
+    deg_data=NULL,
     deg_results = NULL,
     logcpm=NULL,
     wgcna_modules=NULL,
@@ -473,11 +477,11 @@ server <- function(input, output, session) {
   )
   
   # Initialize shinyjs and disable tabs except "Data Input"
-  shinyjs::disable(selector = ".sidebar-menu a[data-value='preprocessing']")
-  shinyjs::disable(selector = ".sidebar-menu a[data-value='deg_analysis']")
-  shinyjs::disable(selector = ".sidebar-menu a[data-value='geneset_enrichment']")
-  shinyjs::disable(selector = ".sidebar-menu a[data-value='gene_regulators']")
-  shinyjs::disable(selector = ".sidebar-menu a[data-value='master_regulators']")
+  #shinyjs::disable(selector = ".sidebar-menu a[data-value='preprocessing']")
+  #shinyjs::disable(selector = ".sidebar-menu a[data-value='deg_analysis']")
+  #shinyjs::disable(selector = ".sidebar-menu a[data-value='geneset_enrichment']")
+  #shinyjs::disable(selector = ".sidebar-menu a[data-value='gene_regulators']")
+  #shinyjs::disable(selector = ".sidebar-menu a[data-value='master_regulators']")
   
   # Data Input Tab
   observeEvent(input$expression_file, {
@@ -497,6 +501,7 @@ server <- function(input, output, session) {
                          header = input$header)
     }
     
+    names(data)[dim(data)[2]]<-"Group"
     rv$raw_data <- data
     
     # Preview data
@@ -523,12 +528,7 @@ server <- function(input, output, session) {
   # Preprocessing Tab
   observeEvent(input$preprocess_data, {
     req(rv$raw_data)
-    
-    
-    shinyjs::enable(selector = ".sidebar-menu a[data-value='deg_analysis']")
-    shinyjs::enable(selector = ".sidebar-menu a[data-value='gene_regulators']")
-    shinyjs::enable(selector = ".sidebar-menu a[data-value='pubmed_search']")
-    
+
     # preprocessing logic
     rv$raw_data2<-rv$raw_data[,-dim(rv$raw_data)[2]]
     rv$raw_data2<-rv$raw_data2[,colSums(rv$raw_data2)>0]
@@ -580,33 +580,75 @@ server <- function(input, output, session) {
     })
   })
   
+  output$download_preprocessed <- downloadHandler(
+    filename = function() {
+      paste("preprocessed_data", Sys.Date(), ".csv", sep = "")
+    },
+    content = function(file) {
+      write.csv(rv$Normalized_data, file, row.names = TRUE)
+    }
+  )
+  
+  
+  
+  
+  
   # DEG Analysis Tab
   observe({
-    req(rv$Normalized_data)
-    non_numeric_cols <- names(rv$Normalized_data)[!sapply(rv$Normalized_data, is.numeric)]
-    updateSelectInput(session, "comparison_group", choices = non_numeric_cols)
+    req(input$data_type,rv$Normalized_data,rv$raw_data)
+    if (input$sidebar == "deg_analysis") {
+    isolate({
+      if (input$data_type == "raw" & !is.null(rv$raw_data) & !input$normalized_data) {
+        non_numeric_cols <- names(rv$raw_data)[!sapply(rv$raw_data, is.numeric)]
+        updateSelectInput(session, "comparison_group", choices = non_numeric_cols)
+        #updateSelectInput(session, "deg_method", choices = "edgeR-Count")
+        rv$deg_data <- rv$raw_data
+        shinyalert("Note", "Select edgeR-Count method for Raw Count Data.")
+      } else if (input$data_type == "processed" & !is.null(rv$Normalized_data)) {
+        non_numeric_cols <- names(rv$Normalized_data)[!sapply(rv$Normalized_data, is.numeric)]
+        updateSelectInput(session, "comparison_group", choices = non_numeric_cols)
+        #updateSelectInput(session, "deg_method", choices = "limma-voom")
+        rv$deg_data <- rv$Normalized_data
+        shinyalert("Note", "Select limma-voom method for Preprocessed Data.")
+      } else if (is.null(rv$Normalized_data) & input$normalized_data) {
+        non_numeric_cols <- names(rv$raw_data)[!sapply(rv$raw_data, is.numeric)]
+        updateSelectInput(session, "comparison_group", choices = non_numeric_cols)
+        #updateSelectInput(session, "deg_method", choices = "limma-voom")
+        shinyalert("Note", "Normalized data provided in the Data Input tab, No Preprocessing needed. \nSelect limma-voom method for Normalized Data.")
+        rv$deg_data <- rv$raw_data
+      } else if (input$data_type == "raw" & input$normalized_data & !is.null(rv$raw_data)) {
+        non_numeric_cols <- names(rv$raw_data)[!sapply(rv$raw_data, is.numeric)]
+        updateSelectInput(session, "comparison_group", choices = non_numeric_cols)
+        #updateSelectInput(session, "deg_method", choices = "limma-voom")
+        shinyalert("Note", "Normalized data provided in the Data Input tab. \nSelect limma-voom method for Normalized Data.")
+        rv$deg_data <- rv$raw_data
+      }
+    })
+    }
   })
+
+
+
+  
   
   observeEvent(input$run_deg, {
-    
-    req(rv$preprocessed_data)
-    req(rv$Normalized_data)
-    req(rv$raw_data)
+    req(rv$deg_data)
     
     shinyjs::enable(selector = ".sidebar-menu a[data-value='geneset_enrichment']")
     shinyjs::enable(selector = ".sidebar-menu a[data-value='master_regulators']")
+
     
     group_column <- input$comparison_group
-    group_data <- rv$Normalized_data[, group_column]
+    group_data <- rv$deg_data[,group_column]
+    deg_data1<-rv$deg_data[,-dim(rv$deg_data)[2]]
+    rv$group_data=data.frame(Samples=rownames(deg_data1),Group=group_data)
     
-    Normalized_data1<-rv$Normalized_data[,-dim(rv$Normalized_data)[2]]
-    rv$group_data=data.frame(Samples=rownames(Normalized_data1),Group=group_data)
     # DEG analysis
     set.seed(123)
     
     if(input$deg_method=="voom"){
-      group <- rv$Normalized_data[,input$comparison_group]
-      data_matrix <- as.matrix(rv$preprocessed_data[,!colnames(rv$preprocessed_data) %in% "Group"])
+      group <- rv$deg_data[,input$comparison_group]
+      data_matrix <- as.matrix(deg_data1[,!colnames(rv$deg_data) %in% "Group"])
       design <- model.matrix(~1+group)
       y <- voom(t(data_matrix), design)
       fit <- lmFit(y, design)
@@ -616,14 +658,12 @@ server <- function(input, output, session) {
       #top.table=round(top.table,4)
       
     }else if (input$deg_method=="edger"){
-      raw_data2<-rv$raw_data[,-dim(rv$raw_data)[2]]
+      raw_data2<-rv$deg_data[,-dim(rv$deg_data)[2]]
       raw_data2<-raw_data2[,colSums(raw_data2)>0]
       
       counts=data.frame(t(raw_data2))
-      group=rv$raw_data[,dim(rv$raw_data)[2]]
+      group=rv$deg_data[,dim(rv$deg_data)[2]]
       d <- DGEList(counts,group=c(group))
-      keep<-rowSums(cpm(d,log=T,keep.lib.sizes=TRUE)>input$filter_low_counts)>=3
-      d <- d[keep,]
       d$samples$lib.size <- colSums(d$counts)
       d <- calcNormFactors(d)
       design.mat <- model.matrix(~ 0 + d$samples$group)
@@ -654,8 +694,8 @@ server <- function(input, output, session) {
     rv$deg_results <- data.frame(deg_results)
     
     output$deg_results <- renderDT({
-      datatable(deg_results, 
-                options = list(scrollX = TRUE))
+      datatable(data.frame(deg_results), 
+                options = list(scrollX = TRUE,pageLength = 5))
     })
     
     # Volcano Plot
@@ -736,10 +776,10 @@ server <- function(input, output, session) {
     
     
     output$heatmap_plot <- renderPlotly({
-      req(rv$deg_results, rv$Normalized_data)
+      req(rv$deg_results, rv$deg_data)
       
-      # Validate data
-      if(is.null(rv$deg_results) || is.null(rv$Normalized_data)) {
+        # Validate data
+      if(is.null(rv$deg_results) || is.null(rv$deg_data)) {
         return(NULL)
       }
       
@@ -764,11 +804,11 @@ server <- function(input, output, session) {
  
       # Prepare data for plotting
       # Extract only numeric columns and the group column
-      numeric_cols <- names(rv$Normalized_data)[sapply(rv$Normalized_data, is.numeric)]
+      numeric_cols <- names(rv$deg_data)[sapply(rv$deg_data, is.numeric)]
       group_col <- input$comparison_group
       
       # Subset data to include only top genes
-      heatmap_data <- rv$Normalized_data %>%
+      heatmap_data <- rv$deg_data %>%
         dplyr::select(all_of(c(intersect(rownames(top_genes), numeric_cols), group_col)))
       heatmap_data=data.frame(heatmap_data)
       heatmap_data=heatmap_data[order(heatmap_data[,dim(heatmap_data)[2]]),]
@@ -793,12 +833,9 @@ server <- function(input, output, session) {
         width <- input$heatmap_width
         height <- input$heatmap_height
         res <- input$heatmap_res
-        
-        # heatmap generation
-        req(rv$deg_results, rv$Normalized_data)
-        
+
         # Validate data
-        if(is.null(rv$deg_results) || is.null(rv$Normalized_data)) {
+        if(is.null(rv$deg_results) || is.null(rv$deg_data)) {
           return(NULL)
         }
         
@@ -816,11 +853,11 @@ server <- function(input, output, session) {
         
         # Prepare data for plotting
         # Extract only numeric columns and the group column
-        numeric_cols <- names(rv$Normalized_data)[sapply(rv$Normalized_data, is.numeric)]
+        numeric_cols <- names(rv$deg_data)[sapply(rv$deg_data, is.numeric)]
         group_col <- input$comparison_group
         
         # Subset data to include only top genes
-        heatmap_data <- rv$Normalized_data %>%
+        heatmap_data <- rv$deg_data %>%
           dplyr::select(all_of(c(intersect(rownames(top_genes), numeric_cols), group_col)))
         heatmap_data=data.frame(heatmap_data)
         heatmap_data=heatmap_data[order(heatmap_data[,dim(heatmap_data)[2]]),]
