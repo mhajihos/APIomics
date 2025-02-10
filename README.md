@@ -27,7 +27,7 @@ APIomics()
 ```
 
 
-![Flowchart](https://github.com/mhajihos/APIomics/blob/master/www/fLowchart2.jpg)
+![Flowchart](https://github.com/mhajihos/APIomics/blob/fab630b087e07b8fe4b152fe9014536c2da8ebc7/www/fLowchart.jpg)
 
 ## Support
 If you need help, please refer to the user guide or contact support. Email:morteza.hajihosseini@appliedpharma.ca
