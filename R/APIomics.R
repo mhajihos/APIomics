@@ -38,7 +38,7 @@ APIomics<-function()
 allowWGCNAThreads() 
 
 
-addResourcePath("static", "www")
+addResourcePath("static", system.file("www", package = "APIomics"))
 
 # 1000 MB (1 GB) file size limit
 options(shiny.maxRequestSize = 1000 * 1024^2) 
