@@ -38,7 +38,12 @@ APIomics<-function()
 allowWGCNAThreads() 
 
 
-addResourcePath("static", system.file("www", package = "APIomics"))
+www_path <- system.file("www", package = "APIomics")
+if (nzchar(www_path) && dir.exists(www_path)) {
+  addResourcePath("static", www_path)
+} else {
+  warning("Warning: 'www' directory not found in APIomics package. Static resources may not load correctly.")
+}
 
 # 1000 MB (1 GB) file size limit
 options(shiny.maxRequestSize = 1000 * 1024^2) 
