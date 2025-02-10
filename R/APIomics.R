@@ -431,8 +431,7 @@ ui <- dashboardPage(
                       style = "font-size: 14px; "),
                     p("Gene Disease Network: In this section, you can call the result from DEG Analysis, Master Regulators, and WGCNA to find the connections for various diseases using the DISGENET database. \nDisGeNET is a discovery platform for the dynamical exploration of human diseases and their genes",
                       style = "font-size: 14px; "),
-                    img(src = "www/fLowchart.jpg",height="50%", width="50%", align="left")
-                    
+                    img(src = "static/fLowchart.jpg", height="50%", width="50%", align="left")
                     
                 )
               )
