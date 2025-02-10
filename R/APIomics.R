@@ -136,6 +136,7 @@ ui <- dashboardPage(
                 box(title = "Upload Expression Data", status = "primary", solidHeader = TRUE, 
                     fileInput("expression_file", "Choose CSV File", 
                               accept = c(".csv", ".txt", ".tsv")),
+                    checkboxInput("normalized_data", "Normalized Data", FALSE),
                     radioButtons("file_type", "File Type",
                                  choices = c("CSV" = "csv", 
                                              "Tab-separated" = "tsv", 
@@ -148,7 +149,7 @@ ui <- dashboardPage(
               )
       ),
       
-      # Preprocessing Tab
+      # Pre_processing Tab
       tabItem(tabName = "preprocessing",
               fluidRow(
                 box(title = "Preprocessing Options", status = "primary", solidHeader = TRUE,
@@ -482,8 +483,6 @@ server <- function(input, output, session) {
   observeEvent(input$expression_file, {
     req(input$expression_file)
     
-    shinyjs::enable(selector = ".sidebar-menu a[data-value='preprocessing']")
-    
     # Read file based on selected type
     if (input$file_type == "csv") {
       data <- read.csv(input$expression_file$datapath, 
@@ -505,7 +504,21 @@ server <- function(input, output, session) {
       datatable(head(data, 50), 
                 options = list(scrollX = TRUE))
     })
+    
   })
+  
+  observe({
+    if (input$normalized_data) {
+      shinyjs::disable(selector = ".sidebar-menu a[data-value='preprocessing']")
+      shinyjs::enable(selector = ".sidebar-menu a[data-value='deg_analysis']")
+      shinyjs::enable(selector = ".sidebar-menu a[data-value='gene_regulators']")
+      shinyjs::enable(selector = ".sidebar-menu a[data-value='pubmed_search']")
+    } else {
+      shinyjs::enable(selector = ".sidebar-menu a[data-value='preprocessing']")
+    }
+  })
+  
+  
   
   # Preprocessing Tab
   observeEvent(input$preprocess_data, {
