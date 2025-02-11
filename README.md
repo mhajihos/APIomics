@@ -1,6 +1,6 @@
 # APIomics
 The gray boxes are under development.
-![The Pipeline](https://github.com/mhajihos/APIomics/blob/37476562660697ae0d72df3923ef986707a82376/www/fLowchart.jpg)
+![The Pipeline](https://github.com/mhajihos/APIomics/blob/master/inst/www/flowchart.jpg)
 
 ## Overview
 APIomics is a bioinformatics analysis pipeline designed to process and analyze high-throughput expression data. This tool enables users to perform preprocessing, differential expression analysis, gene set enrichment, regulatory network analysis, pubmed and clinical trial search.
