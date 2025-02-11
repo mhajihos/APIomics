@@ -1,5 +1,6 @@
 # APIomics
-## APIomics Pipeline: the gray boxes are under development.
+## APIomics Pipeline
+### Note: the gray boxes are under development.
 ![The Pipeline](https://github.com/mhajihos/APIomics/blob/master/inst/www/flowchart.jpg)
 
 ## Overview
