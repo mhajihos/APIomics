@@ -173,10 +173,10 @@ ui <- dashboardPage(
               fluidRow(
                 useShinyjs(),
                 box(title = "DEG Analysis Setup", status = "primary", solidHeader = TRUE,
-                    selectInput("data_type", "Select Data Type", choices = c("Raw Count Data" = "raw", "Preprocessed Data" = "processed")),
+                    selectInput("data_type", "Select Data Type", choices = c("Raw Count Data" = "raw", "Preprocessed Data" = "processed", "Normalized Data"="normalized")),
                     selectInput("deg_method", "DEG Method",
                                 choices = c("edgeR-Count" = "edger",
-                                            "limma-voom" = "voom")),
+                                            "limma" = "voom")),
                     selectInput("comparison_group", "Select Comparison Group",
                                 choices = c("Choose after data input")),
                     
@@ -213,7 +213,7 @@ ui <- dashboardPage(
                     numericInput("volcano_res", "Resolution (dpi)", value = 300, min = 100),
                     downloadButton("download_volcano_tiff", "Download Volcano Plot (TIFF)")
                 ),
-                box(title = "Heatmap", status = "success", solidHeader = TRUE, collapsible = TRUE,
+                box(title = "Heatmap (Top 20)", status = "success", solidHeader = TRUE, collapsible = TRUE,
                     plotlyOutput("heatmap_plot"),
                     sliderInput("heatmap_width", "Width (inches)", min = 4, max = 20, value = 8,width='400px'),
                     sliderInput("heatmap_height", "Height (inches)", min = 4, max = 20, value = 8,width='400px'),
@@ -229,7 +229,7 @@ ui <- dashboardPage(
                 box(title = "Regulatory Network Analysis", status = "primary", solidHeader = TRUE,
                     selectInput("regulator_method", "Regulatory Analysis Method",
                                 choices = c("WGCNA" = "wgcna")),
-                    selectInput("data_type_reg", "Select Data Type", choices = c("Raw Count Data" = "raw", "Preprocessed Data" = "processed")),
+                    selectInput("data_type_reg", "Select Data Type", choices = c("Raw Count Data" = "raw", "Preprocessed Data" = "processed", "Normalized Data"="normalized")),
                     selectInput("comparison_group2", "Select Comparison Group",
                                 choices = c("Choose after data input")),
                     radioButtons("module_selection", "Select Module", choices = c("To See Modules, Run Analysis First")),
@@ -309,7 +309,7 @@ ui <- dashboardPage(
                 box(title = "Master Regulators Analysis", status = "primary", solidHeader = TRUE, width = 12,
                     selectInput("MRA_type", "MRA Type",
                                 choices = c("Corto" = "corto")),
-                    selectInput("data_type_mra", "Select Data Type", choices = c("Raw Count Data" = "raw", "Preprocessed Data" = "processed")),
+                    selectInput("data_type_mra", "Select Data Type", choices = c("Raw Count Data" = "raw", "Preprocessed Data" = "processed", "Normalized Data"="normalized")),
                     numericInput("logfc_threshold2", "Log Fold Change Threshold for Gene List", 
                                  value = 0.5, min = 0),
                     numericInput("qvalue_threshold2", "Adjusted_P-value Threshold for Gene List", 
@@ -595,7 +595,7 @@ server <- function(input, output, session) {
   
   # DEG Analysis Tab
   observe({
-    req(input$data_type,rv$Normalized_data,rv$raw_data)
+    req(input$data_type)
     if (input$sidebar == "deg_analysis") {
     isolate({
       if (input$data_type == "raw" & !is.null(rv$raw_data) & !input$normalized_data) {
@@ -604,23 +604,17 @@ server <- function(input, output, session) {
         #updateSelectInput(session, "deg_method", choices = "edgeR-Count")
         rv$deg_data <- rv$raw_data
         shinyalert("Note", "Select edgeR-Count method for Raw Count Data.")
-      } else if (input$data_type == "processed" & !is.null(rv$Normalized_data)) {
+      } else if (input$data_type == "processed" & !is.null(rv$Normalized_data) & !input$normalized_data) {
         non_numeric_cols <- names(rv$Normalized_data)[!sapply(rv$Normalized_data, is.numeric)]
         updateSelectInput(session, "comparison_group", choices = non_numeric_cols)
-        #updateSelectInput(session, "deg_method", choices = "limma-voom")
+        #updateSelectInput(session, "deg_method", choices = "limma")
         rv$deg_data <- rv$Normalized_data
         shinyalert("Note", "Select limma-voom method for Preprocessed Data.")
-      } else if (is.null(rv$Normalized_data) & input$normalized_data) {
+      } else if (input$data_type == "normalized" & input$normalized_data & !is.null(rv$raw_data)) {
         non_numeric_cols <- names(rv$raw_data)[!sapply(rv$raw_data, is.numeric)]
         updateSelectInput(session, "comparison_group", choices = non_numeric_cols)
         #updateSelectInput(session, "deg_method", choices = "limma-voom")
-        shinyalert("Note", "Normalized data provided in the Data Input tab, No Preprocessing needed. \nSelect limma-voom method for Normalized Data.")
-        rv$deg_data <- rv$raw_data
-      } else if (input$data_type == "raw" & input$normalized_data & !is.null(rv$raw_data)) {
-        non_numeric_cols <- names(rv$raw_data)[!sapply(rv$raw_data, is.numeric)]
-        updateSelectInput(session, "comparison_group", choices = non_numeric_cols)
-        #updateSelectInput(session, "deg_method", choices = "limma-voom")
-        shinyalert("Note", "Normalized data provided in the Data Input tab. \nSelect limma-voom method for Normalized Data.")
+        shinyalert("Note", "Normalized data provided in the Data Input tab. \nSelect limma method for Normalized Data.")
         rv$deg_data <- rv$raw_data
       }
     })
