@@ -936,10 +936,10 @@ server <- function(input, output, session) {
     req(input$data_type_reg)
     if (input$sidebar == "gene_regulators") {
       isolate({
-        if (!is.null(rv$raw_data) & !input$normalized_data) {
+        if (!is.null(rv$raw_data) & !input$normalized_data & is.null(rv$Normalized_data)) {
           shinyalert("Note", "WGCNA needs preprocessed or normalized data.")
           deg_alert_shown(TRUE)
-        } else if (input$data_type_reg == "processed" & !is.null(rv$Normalized_data) & !input$normalized_data) {
+        } else if (input$data_type_reg == "processed" & !is.null(rv$raw_data) & !is.null(rv$Normalized_data) & !input$normalized_data) {
             non_numeric_cols <- names(rv$Normalized_data)[!sapply(rv$Normalized_data, is.numeric)]
             updateSelectInput(session, "comparison_group2", choices = non_numeric_cols)
             rv$reg_data <- rv$Normalized_data
