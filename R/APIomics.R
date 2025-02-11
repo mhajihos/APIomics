@@ -180,15 +180,18 @@ ui <- dashboardPage(
                     selectInput("comparison_group", "Select Comparison Group",
                                 choices = c("Choose after data input")),
                     
-                    numericInput("logfc_threshold", "Log Fold Change Threshold for Plots", 
-                                 value = 0.5, min = 0),
-                    numericInput("qvalue_threshold", "Adjusted_P-value Threshold for Plots", 
-                                 value = 0.05, min = 0, max = 1),
+                    
                     
                     # Horizontal layout for the Run button and Progress bar
                     fluidRow(
                       column(6, 
-                             actionButton("run_deg", "Run DEG Analysis")
+                             actionButton("run_deg", "Run DEG Analysis"),
+                             br(),
+                             br(),
+                             numericInput("logfc_threshold", "Log Fold Change Threshold for Plots", 
+                                          value = 0.5, min = 0),
+                             numericInput("qvalue_threshold", "Adjusted_P-value Threshold for Plots", 
+                                          value = 0.05, min = 0, max = 1)
                       ),
                       column(6, 
                              div(id = "progress_bar_container", style = "display:none; width: 100%;",
@@ -229,14 +232,16 @@ ui <- dashboardPage(
                 box(title = "Regulatory Network Analysis", status = "primary", solidHeader = TRUE,
                     selectInput("regulator_method", "Regulatory Analysis Method",
                                 choices = c("WGCNA" = "wgcna")),
-                    selectInput("data_type_reg", "Select Data Type", choices = c("Raw Count Data" = "raw", "Preprocessed Data" = "processed", "Normalized Data"="normalized")),
+                    selectInput("data_type_reg", "Select Data Type", choices = c("Preprocessed Data" = "processed", "Normalized Data"="normalized")),
                     selectInput("comparison_group2", "Select Comparison Group",
                                 choices = c("Choose after data input")),
+                    actionButton("find_regulators", "Find Regulators"),
+                    br(),
+                    br(),
                     radioButtons("module_selection", "Select Module", choices = c("To See Modules, Run Analysis First")),
                     numericInput("top_regulators", "Number of Top Genes for Plots", 
                                  value = 10, min = 1),
-                    uiOutput("group_filter_radio"),
-                    actionButton("find_regulators", "Find Regulators")
+                    uiOutput("group_filter_radio")
                     
                 ),
                 box(title = "Regulatory Network Results", status = "info", solidHeader = TRUE,
@@ -310,10 +315,6 @@ ui <- dashboardPage(
                     selectInput("MRA_type", "MRA Type",
                                 choices = c("Corto" = "corto")),
                     selectInput("data_type_mra", "Select Data Type", choices = c("Raw Count Data" = "raw", "Preprocessed Data" = "processed", "Normalized Data"="normalized")),
-                    numericInput("logfc_threshold2", "Log Fold Change Threshold for Gene List", 
-                                 value = 0.5, min = 0),
-                    numericInput("qvalue_threshold2", "Adjusted_P-value Threshold for Gene List", 
-                                 value = 0.05, min = 0, max = 1),
                     selectInput("mra_group", "Select Group of Interest:",
                                 choices = NULL),
                     actionButton("run_mra", "Run MRA")
@@ -347,7 +348,7 @@ ui <- dashboardPage(
                                                 "Master Regulators" = "master_regulators",
                                                 "Gene Regulators (Top 20 Module-Genes)" = "gene_regulators")),
                     uiOutput("module_selection"),
-                    textInput("disease_filter", "Specify Disease:", value = ""),
+                    textInput("disease_filter", "Specify Disease:", value = "Specify a disease"),
                     selectInput("search_field", "Search in:", 
                                 choices = c("Title/Abstract" = "[Title/Abstract]", 
                                             "MeSH Terms" = "[MeSH Terms]"), 
@@ -464,6 +465,7 @@ server <- function(input, output, session) {
     deg_data=NULL,
     deg_results = NULL,
     logcpm=NULL,
+    reg_data=NULL,
     wgcna_modules=NULL,
     module_genes=NULL,
     mod_mat=NULL,
@@ -473,6 +475,7 @@ server <- function(input, output, session) {
     net_colors=NULL,
     predicted = NULL, 
     regulons = NULL,
+    mra_data=NULL,
     mra_results=NULL
   )
   
@@ -594,30 +597,34 @@ server <- function(input, output, session) {
   
   
   # DEG Analysis Tab
+  deg_alert_shown <- reactiveVal(FALSE)
+  
   observe({
     req(input$data_type)
     if (input$sidebar == "deg_analysis") {
-    isolate({
-      if (input$data_type == "raw" & !is.null(rv$raw_data) & !input$normalized_data) {
-        non_numeric_cols <- names(rv$raw_data)[!sapply(rv$raw_data, is.numeric)]
-        updateSelectInput(session, "comparison_group", choices = non_numeric_cols)
-        #updateSelectInput(session, "deg_method", choices = "edgeR-Count")
-        rv$deg_data <- rv$raw_data
-        shinyalert("Note", "Select edgeR-Count method for Raw Count Data.")
-      } else if (input$data_type == "processed" & !is.null(rv$Normalized_data) & !input$normalized_data) {
-        non_numeric_cols <- names(rv$Normalized_data)[!sapply(rv$Normalized_data, is.numeric)]
-        updateSelectInput(session, "comparison_group", choices = non_numeric_cols)
-        #updateSelectInput(session, "deg_method", choices = "limma")
-        rv$deg_data <- rv$Normalized_data
-        shinyalert("Note", "Select limma-voom method for Preprocessed Data.")
-      } else if (input$data_type == "normalized" & input$normalized_data & !is.null(rv$raw_data)) {
-        non_numeric_cols <- names(rv$raw_data)[!sapply(rv$raw_data, is.numeric)]
-        updateSelectInput(session, "comparison_group", choices = non_numeric_cols)
-        #updateSelectInput(session, "deg_method", choices = "limma-voom")
-        shinyalert("Note", "Normalized data provided in the Data Input tab. \nSelect limma method for Normalized Data.")
-        rv$deg_data <- rv$raw_data
-      }
-    })
+      isolate({
+
+          if (input$data_type == "raw" & !is.null(rv$raw_data) & !input$normalized_data) {
+            non_numeric_cols <- names(rv$raw_data)[!sapply(rv$raw_data, is.numeric)]
+            updateSelectInput(session, "comparison_group", choices = non_numeric_cols)
+            rv$deg_data <- rv$raw_data
+            shinyalert("Note", "Select edgeR-Count method for Raw Count Data.")
+            deg_alert_shown(TRUE)
+          } else if (input$data_type == "processed" & !is.null(rv$Normalized_data) & !input$normalized_data) {
+            non_numeric_cols <- names(rv$Normalized_data)[!sapply(rv$Normalized_data, is.numeric)]
+            updateSelectInput(session, "comparison_group", choices = non_numeric_cols)
+            rv$deg_data <- rv$Normalized_data
+            shinyalert("Note", "Select limma-voom method for Preprocessed Data.")
+            deg_alert_shown(TRUE)
+          } else if (input$data_type == "normalized" & input$normalized_data & !is.null(rv$raw_data)) {
+            non_numeric_cols <- names(rv$raw_data)[!sapply(rv$raw_data, is.numeric)]
+            updateSelectInput(session, "comparison_group", choices = non_numeric_cols)
+            shinyalert("Note", "Normalized data provided in the Data Input tab. \nSelect limma method for Normalized Data.")
+            rv$deg_data <- rv$raw_data
+            deg_alert_shown(TRUE)
+          }
+          
+      })
     }
   })
 
@@ -919,30 +926,49 @@ server <- function(input, output, session) {
   
   
   
+ 
+  # Gene Regulators Tab
+  deg_alert_shown2 <- reactiveVal(FALSE)
   
   observe({
-    req(rv$Normalized_data)
-    non_numeric_cols <- names(rv$Normalized_data)[!sapply(rv$Normalized_data, is.numeric)]
-    updateSelectInput(session, "comparison_group2", choices = non_numeric_cols)
+    req(input$data_type_reg)
+    if (input$sidebar == "gene_regulators") {
+      isolate({
+        if (!is.null(rv$raw_data) & !input$normalized_data) {
+          shinyalert("Note", "WGCNA needs preprocessed or normalized data.")
+          deg_alert_shown(TRUE)
+        } else if (input$data_type_reg == "processed" & !is.null(rv$Normalized_data) & !input$normalized_data) {
+            non_numeric_cols <- names(rv$Normalized_data)[!sapply(rv$Normalized_data, is.numeric)]
+            updateSelectInput(session, "comparison_group2", choices = non_numeric_cols)
+            rv$reg_data <- rv$Normalized_data
+          } else if (input$data_type_reg == "normalized" & input$normalized_data & !is.null(rv$raw_data)) {
+            non_numeric_cols <- names(rv$raw_data)[!sapply(rv$raw_data, is.numeric)]
+            updateSelectInput(session, "comparison_group2", choices = non_numeric_cols)
+            rv$reg_data <- rv$raw_data
+          }
+
+      })
+    }
   })
+  
   
   
   
   # Gene Regulators Tab
   observeEvent(input$find_regulators, {
     
-    req(rv$Normalized_data)
+    req(rv$reg_data)
     group_column <- input$comparison_group2
-    group_data <- rv$Normalized_data[, group_column]
+    group_data <- rv$reg_data[, group_column]
     
-    Normalized_data1<-rv$Normalized_data[,-dim(rv$Normalized_data)[2]]
-    rv$group_data=data.frame(Samples=rownames(Normalized_data1),Group=group_data)
+    reg_data1<-rv$reg_data[,-dim(rv$reg_data)[2]]
+    rv$group_data=data.frame(Samples=rownames(reg_data1),Group=group_data)
     
     
     
     if(input$regulator_method=="wgcna"){
       
-      datExpr <- Normalized_data1[,sapply(Normalized_data1, is.numeric)]
+      datExpr <- reg_data1[,sapply(reg_data1, is.numeric)]
       
       # Remove rows with NAs
       datExpr <- datExpr[complete.cases(datExpr), ]
@@ -1075,7 +1101,7 @@ server <- function(input, output, session) {
   output$group_filter_radio <- renderUI({
     req(rv$group_data)
     unique_groups <- unique(rv$group_data$Group)
-    radioButtons("selected_group", "Filter by Group:",
+    radioButtons("selected_group", "Filter by Group (Heatmap only):",
                  choices = c("All Groups", unique_groups),
                  selected = "All Groups")
   })
@@ -1085,12 +1111,12 @@ server <- function(input, output, session) {
     req(rv$group_data)
     req(rv$wgcna_modules)
     req(rv$group_data)
-    req(rv$Normalized_data)
+    req(rv$reg_data)
     req(input$module_selection)
     req(rv$moduleMembership)
     req(input$top_regulators)
     
-    Normalized_data1<-rv$Normalized_data[,-dim(rv$Normalized_data)[2]]
+    reg_data1<-rv$reg_data[,-dim(rv$reg_data)[2]]
     
     module_genes_top <- rv$moduleMembership%>%
       select(input$module_selection)
@@ -1104,16 +1130,16 @@ server <- function(input, output, session) {
     # Filter by selected group if not "All Groups"
     if(input$selected_group != "All Groups") {
       group_indices <- which(rv$group_data$Group == input$selected_group)
-      Normalized_data1 <- Normalized_data1[group_indices,]
+      reg_data1 <- reg_data1[group_indices,]
     }
     
     
     # Prepare group information
-    mod_mat <- Normalized_data1 %>%
+    mod_mat <- reg_data1 %>%
       dplyr::select(all_of(topGenes)) %>%
       as.matrix()
     
-    group_data <- rv$Normalized_data[rownames(mod_mat), ncol(rv$Normalized_data), drop = FALSE]
+    group_data <- rv$reg_data[rownames(mod_mat), ncol(rv$reg_data), drop = FALSE]
     
     # Set up the gene expression data frame
     
@@ -1152,18 +1178,18 @@ server <- function(input, output, session) {
     req(rv$wgcna_modules)
     req(input$module_selection)
     req(rv$net_colors)
-    req(rv$Normalized_data)
+    req(rv$reg_data)
     req(input$top_regulators)
     
-    Normalized_data1<-rv$Normalized_data[,-dim(rv$Normalized_data)[2]]
+    reg_data1<-rv$reg_data[,-dim(rv$reg_data)[2]]
     
     # Filter by selected group if not "All Groups"
     if(input$selected_group != "All Groups") {
       group_indices <- which(rv$group_data$Group == input$selected_group)
-      Normalized_data1 <- Normalized_data1[group_indices,]
+      reg_data1 <- reg_data1[group_indices,]
     }
     
-    datExpr <- Normalized_data1[,sapply(Normalized_data1, is.numeric)]
+    datExpr <- reg_data1[,sapply(reg_data1, is.numeric)]
     datExpr <- datExpr[complete.cases(datExpr), ]
     datExpr=as.matrix(datExpr)
     
@@ -1213,7 +1239,7 @@ server <- function(input, output, session) {
       tiff(file, width = width, height = height, units = "in", res = res)
       
       # Prepare data
-      Normalized_data1 <- rv$Normalized_data[,-dim(rv$Normalized_data)[2]]
+      reg_data1 <- rv$reg_data[,-dim(rv$reg_data)[2]]
       
       module_genes_top <- rv$moduleMembership %>%
         select(input$module_selection)
@@ -1226,15 +1252,15 @@ server <- function(input, output, session) {
       # Filter by selected group if not "All Groups"
       if(input$selected_group != "All Groups") {
         group_indices <- which(rv$group_data$Group == input$selected_group)
-        Normalized_data1 <- Normalized_data1[group_indices,]
+        reg_data1 <- reg_data1[group_indices,]
       }
       
       # Set up the gene expression data frame
-      mod_mat <- Normalized_data1 %>%
+      mod_mat <- reg_data1 %>%
         dplyr::select(all_of(topGenes)) %>%
         as.matrix()
       
-      group_data <- rv$Normalized_data[rownames(mod_mat), ncol(rv$Normalized_data), drop = FALSE]
+      group_data <- rv$reg_data[rownames(mod_mat), ncol(rv$reg_data), drop = FALSE]
       
       # Prepare final matrix with ordered groups
       mod_mat <- data.frame(mod_mat, Group=group_data[,1])
@@ -1297,15 +1323,15 @@ server <- function(input, output, session) {
       tiff(file, width = width, height = height, units = "in", res = res)
       
       # Prepare data
-      Normalized_data1 <- rv$Normalized_data[,-dim(rv$Normalized_data)[2]]
+      reg_data1 <- rv$reg_data[,-dim(rv$reg_data)[2]]
       
       # Filter by selected group if not "All Groups"
       if(input$selected_group != "All Groups") {
         group_indices <- which(rv$group_data$Group == input$selected_group)
-        Normalized_data1 <- Normalized_data1[group_indices,]
+        reg_data1 <- reg_data1[group_indices,]
       }
       
-      datExpr <- Normalized_data1[,sapply(Normalized_data1, is.numeric)]
+      datExpr <- reg_data1[,sapply(reg_data1, is.numeric)]
       datExpr <- datExpr[complete.cases(datExpr), ]
       datExpr <- as.matrix(datExpr)
       
@@ -1404,7 +1430,7 @@ server <- function(input, output, session) {
     
     output$enrichment_table <- renderDT({
       req(rv$enrichment_results)
-      datatable(as.data.frame(rv$enrichment_results), options = list(scrollX = TRUE,pageLength = 5))
+      datatable(as.data.frame(rv$enrichment_results), options = list(scrollX = TRUE,pageLength = 3))
     })
     
     output$enrichment_network <- renderPlot({
@@ -1467,39 +1493,53 @@ server <- function(input, output, session) {
   
   
   #MRA
+  # MRA Tab
   observe({
-    req(rv$group_data)
-    updateSelectInput(session, 
-                      "mra_group",
-                      choices = unique(rv$group_data$Group))
+    req(input$data_type_mra,req(rv$group_data))
+    if (input$sidebar == "master_regulators") {
+      isolate({
+        if (input$data_type_mra == "raw" & !is.null(rv$raw_data) & !input$normalized_data) {
+          updateSelectInput(session, "mra_group", choices = unique(rv$group_data$Group))
+          rv$mra_data <- rv$raw_data
+        } else if (input$data_type_mra == "processed" & !is.null(rv$Normalized_data) & !input$normalized_data) {
+          updateSelectInput(session, "mra_group", choices = unique(rv$group_data$Group))
+          rv$mra_data <- rv$Normalized_data
+
+        } else if (input$data_type_mra == "normalized" & input$normalized_data & !is.null(rv$raw_data)) {
+          updateSelectInput(session, "mra_group", choices = unique(rv$group_data$Group))
+          rv$mra_data <- rv$raw_data
+
+        }
+        
+      })
+    }
   })
-  
   
   
   # Update the observeEvent section for MRA
   observeEvent(input$run_mra, {
     req(rv$deg_results)
-    req(rv$Normalized_data)
+    req(rv$mra_data)
     req(input$mra_group)
     
     withProgress(message = 'Running Master Regulator Analysis', value = 0, {
       
       incProgress(0.3, detail = "Preparing data matrices")
       # Convert to character
-      rv$Normalized_data$Group <- as.character(rv$Normalized_data$Group)
+      rv$mra_data$Group <- as.character(rv$mra_data$Group)
       
       # Prepare expression data matrices
-      expr_data_mra <- rv$Normalized_data %>%
+      expr_data_mra <- rv$mra_data %>%
         dplyr::filter(Group == input$mra_group) %>%
         dplyr::select(-Group)  # Drop Group column
       
-      other_data <- rv$Normalized_data %>%
+      other_data <- rv$mra_data %>%
         dplyr::filter(Group != input$mra_group) %>%
         dplyr::select(-Group)
       
       # Get significant DEGs
-      deg_genes <- rownames(rv$deg_results)[rv$deg_results$adj.P.Val < input$qvalue_threshold2 & 
-                                              abs(rv$deg_results$logFC) > input$logfc_threshold2]
+      deg_genes <- rownames(rv$deg_results)[rv$deg_results$adj.P.Val < input$qvalue_threshold & 
+                                              abs(rv$deg_results$logFC) > input$logfc_threshold]
       
       if(length(deg_genes) == 0) {
         shinyalert("Warning", "No significant DEGs found. Using top 100 genes by p-value.")
