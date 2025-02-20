@@ -35,7 +35,122 @@ APIomics<-function()
   suppressMessages(suppressWarnings(library(rentrez)))
   suppressMessages(suppressWarnings(library(DOSE)))
   suppressMessages(suppressWarnings(library(visNetwork)))
+  suppressMessages(suppressWarnings(library(xml2)))
 allowWGCNAThreads() 
+
+
+# Database search functions
+search_chembl <- function(genes) {
+  results <- data.frame(
+    molecule_pref_name = character(),
+    target_pref_name = character(),
+    standard_type = character(),
+    standard_value = numeric(),
+    indication_class = character(),
+    stringsAsFactors = FALSE
+  )
+  
+  for (gene in genes) {
+    tryCatch({
+      # ChEMBL API endpoint - using the newer REST API format
+      url <- paste0("https://www.ebi.ac.uk/chembl/api/data/target/search.xml?q=", URLencode(gene))
+      
+      response <- GET(url)
+      if (status_code(response) == 200) {
+        # Parse XML response
+        xml_content <- read_xml(rawToChar(response$content))
+        
+        # Extract target IDs
+        target_ids <- xml_find_all(xml_content, "//target_chembl_id") %>%
+          xml_text()
+        
+        for (target_id in target_ids) {
+          # Get compounds for this target
+          compounds_url <- paste0("https://www.ebi.ac.uk/chembl/api/data/molecule.xml?target_chembl_id=", target_id)
+          compounds_response <- GET(compounds_url)
+          
+          if (status_code(compounds_response) == 200) {
+            compounds_xml <- read_xml(rawToChar(compounds_response$content))
+            
+            # Extract compound information
+            molecules <- xml_find_all(compounds_xml, "//molecule")
+            
+            for (molecule in molecules) {
+              temp_df <- data.frame(
+                molecule_pref_name = xml_text(xml_find_first(molecule, ".//pref_name")) %||% NA,
+                target_pref_name = gene,
+                standard_type = "IC50",
+                standard_value = as.numeric(xml_text(xml_find_first(molecule, ".//alogp")) %||% NA),
+                max_phase = as.numeric(xml_text(xml_find_first(molecule, ".//max_phase")) %||% NA),
+                indication_class = xml_text(xml_find_first(molecule, ".//therapeutic_flag")) %||% NA,
+                stringsAsFactors = FALSE
+              )
+              temp_df <- temp_df[temp_df$molecule_pref_name!="",]
+              results <- rbind(results, temp_df)
+            }
+          }
+        }
+      }
+    }, error = function(e) {
+      warning(paste("Error processing gene:", gene, "-", e$message))
+    })
+    
+    # Add small delay to avoid overwhelming the API
+    Sys.sleep(0.5)
+  }
+  return(results)
+}
+
+search_bindingdb <- function(genes) {
+  results <- data.frame(
+    compound_name = character(),
+    target_name = character(),
+    affinity_type = character(),
+    affinity_value = numeric(),
+    status = character(),
+    indication = character(),
+    stringsAsFactors = FALSE
+  )
+  
+  for (gene in genes) {
+    tryCatch({
+      # BindingDB REST API
+      url <- paste0("https://www.bindingdb.org/REST/search/target/", URLencode(gene))
+      
+      response <- GET(url)
+      if (status_code(response) == 200) {
+        # Parse XML response
+        xml_content <- read_xml(rawToChar(response$content))
+        
+        # Extract binding data
+        compounds <- xml_find_all(xml_content, "//compound")
+        
+        for (compound in compounds) {
+          temp_df <- data.frame(
+            compound_name = xml_text(xml_find_first(compound, ".//name")) %||% NA,
+            target_name = gene,
+            affinity_type = xml_text(xml_find_first(compound, ".//affinity_type")) %||% NA,
+            affinity_value = as.numeric(xml_text(xml_find_first(compound, ".//affinity_value")) %||% NA),
+            status = xml_text(xml_find_first(compound, ".//status")) %||% NA,
+            indication = xml_text(xml_find_first(compound, ".//indication")) %||% NA,
+            stringsAsFactors = FALSE
+          )
+          results <- rbind(results, temp_df)
+        }
+      }
+    }, error = function(e) {
+      warning(paste("Error processing gene:", gene, "-", e$message))
+    })
+    
+    # Add small delay to avoid overwhelming the API
+    Sys.sleep(0.5)
+  }
+  
+  return(results)
+}
+
+# Helper function to safely handle NULL values
+`%||%` <- function(x, y) if (is.null(x)) y else x
 
 
 addResourcePath("static", system.file("www", package = "APIomics", mustWork = TRUE))
@@ -111,16 +226,16 @@ ui <- dashboardPage(
     ),
     sidebarMenu(
       id = "sidebar",
-      menuItem("Dashboard", tabName = "intro", icon = icon("tachometer-alt")),  
-      menuItem("Data Input", tabName = "data_input", icon = icon("file-upload")), 
-      menuItem("Preprocessing", tabName = "preprocessing", icon = icon("cogs")),  
-      menuItem("Differential Expression", tabName = "deg_analysis", icon = icon("chart-bar")), 
-      menuItem("Gene Set Enrichment", tabName = "geneset_enrichment", icon = icon("flask")),  
-      menuItem("Gene Regulators", tabName = "gene_regulators", icon = icon("project-diagram")), 
-      menuItem("Master Regulators", tabName = "master_regulators", icon = icon("user-cog")),  
-      menuItem("Literature Search", tabName = "pubmed_search", icon = icon("book-open")),  
-      menuItem("Gene Disease Network", tabName = "gene_disease_network", icon = icon("sitemap"))  
-      
+      menuItem("Dashboard", tabName = "intro", icon = icon("gauge")),
+      menuItem("Data Input", tabName = "data_input", icon = icon("upload")),
+      menuItem("Preprocessing", tabName = "preprocessing", icon = icon("sliders")),
+      menuItem("Differential Expression", tabName = "deg_analysis", icon = icon("chart-line")),
+      menuItem("Gene Set Enrichment", tabName = "geneset_enrichment", icon = icon("microscope")),
+      menuItem("Gene Regulators", tabName = "gene_regulators", icon = icon("dna")),
+      menuItem("Master Regulators", tabName = "master_regulators", icon = icon("crown")),
+      menuItem("Literature Search", tabName = "pubmed_search", icon = icon("search")),
+      menuItem("Gene Disease Network", tabName = "gene_disease_network", icon = icon("network-wired")),
+      menuItem("Drug Database Search", tabName = "database_search", icon = icon("pills"))
     )
   ),
   dashboardBody(
@@ -445,6 +560,26 @@ ui <- dashboardPage(
                     
                 )
               )
+      ),
+      
+      tabItem(tabName = "database_search",
+              fluidRow(
+                box(title = "Search Options", status = "primary", solidHeader = TRUE,
+                    selectInput("gene__source2", "Select Gene List:", 
+                                choices = list("DEG Analysis (Top 20 Genes)" = "deg_analysis",
+                                               "Master Regulators" = "master_regulators",
+                                               "Gene Regulators (Top 20 Module-Genes)" = "gene_regulators")),
+                    uiOutput("module_selection"),
+                    radioButtons("module_selection4", "Select Module", choices = c("Only for Gene Regulators")),
+                    actionButton("search_database", "Search")
+                )
+              ),
+              fluidRow(
+                box(title = "Drug Target Results", width = 12, 
+                       DTOutput("consolidated_results"),
+                       downloadButton("download_results", "Download Results")
+                )
+              )
       )
       
     )
@@ -478,7 +613,8 @@ server <- function(input, output, session) {
     predicted = NULL, 
     regulons = NULL,
     mra_data=NULL,
-    mra_results=NULL
+    mra_results=NULL,
+    all_results=NULL
   )
   
   # Initialize shinyjs and disable tabs except "Data Input"
@@ -1716,7 +1852,8 @@ server <- function(input, output, session) {
       # Get genes from selected module
       module_genes <- rv$wgcna_modules %>%
         filter(module == input$module_selection2) %>%
-        pull(gene)
+        pull(gene) %>%
+        head(20)
       genes <- module_genes
     }
     
@@ -2066,7 +2203,7 @@ server <- function(input, output, session) {
       req(input$module_selection3)
       gene_list <-  rv$wgcna_modules %>%
         filter(module == input$module_selection3) %>%
-        pull(gene)
+        pull(gene) 
     }
     
 
@@ -2173,6 +2310,203 @@ server <- function(input, output, session) {
   })
 
   
+  
+  #Database Search
+  observe({
+    req(input$gene_list)
+    if(input$gene_list=="gene_regulators") 
+    {
+      req(rv$module_colors)
+      updateRadioButtons(
+        session, 
+        "module_selection4", 
+        choices = rv$module_colors
+      )}
+  })
+  
+  # Function to standardize database results
+  standardize_results <- function(data, source) {
+    # Initialize empty dataframe with required columns
+    std_cols <- c("Drug_Name", "Target_Genes", "Source", "Binding_Type", 
+                  "Affinity_Value", "Approval_Status", "Indication")
+    
+    if (is.null(data) || nrow(data) == 0) {
+      return(data.frame(matrix(ncol = length(std_cols), nrow = 0, 
+                               dimnames = list(NULL, std_cols))))
+    }
+    
+    # Process based on source
+    result <- switch(source,
+                     "ChEMBL" = {
+                       # Group by drug to combine target genes
+                       data %>%
+                         group_by(molecule_pref_name) %>%
+                         summarize(
+                           Target_Genes = target_pref_name,
+                           Binding_Type = first(standard_type),
+                           Affinity_Value = mean(standard_value, na.rm = TRUE),
+                           max_phase = first(max_phase),
+                           indication_class = first(indication_class)
+                         ) %>%
+                         mutate(
+                           Drug_Name = as.character(molecule_pref_name),
+                           Source = "ChEMBL",
+                           Approval_Status = case_when(
+                             max_phase == 4 ~ "FDA Approved",
+                             max_phase > 0 ~ paste("Phase", max_phase),
+                             TRUE ~ "Experimental"
+                           ),
+                           Indication = ifelse(indication_class, "Therapeutic", "Non-therapeutic")
+                         ) %>%
+                         dplyr::select(Drug_Name, Target_Genes, Source, Binding_Type, 
+                                Affinity_Value, Approval_Status, Indication) %>%
+                                  group_by(Drug_Name,Source,Approval_Status,Binding_Type, Affinity_Value,Indication) %>%
+                                    summarise(Target_Genes = str_c(Target_Genes, collapse = ", "), .groups = "drop") 
+                     },
+                     "BindingDB" = {
+                       # Group by drug to combine target genes
+                       data %>%
+                         group_by(compound_name) %>%
+                         summarize(
+                           Target_Genes = target_name,
+                           Binding_Type = first(affinity_type),
+                           Affinity_Value = mean(as.numeric(affinity_value), na.rm = TRUE),
+                           status = first(status),
+                           indication = first(indication)
+                         ) %>%
+                         mutate(
+                           Drug_Name = as.character(compound_name),
+                           Source = "BindingDB",
+                           Approval_Status = status,
+                           Indication = indication
+                         ) %>%
+                         dplyr::select(Drug_Name, Target_Genes, Source, Binding_Type, 
+                                Affinity_Value, Approval_Status, Indication) %>%
+                         group_by(Drug_Name,Source,Approval_Status,Binding_Type, Affinity_Value,Indication) %>%
+                         summarise(Target_Genes = str_c(Target_Genes, collapse = ", "), .groups = "drop") 
+                     },
+                     data.frame(matrix(ncol = length(std_cols), nrow = 0, 
+                                       dimnames = list(NULL, std_cols)))
+    )
+    
+}
+  # 
+  observeEvent(input$search_database, {
+    # Get gene list based on selection
+    req(input$gene__source2)
+    
+    gene_list <- NULL
+    if (input$gene__source2 == "deg_analysis") {
+      req(rv$deg_results)
+      gene_list <- rownames(rv$deg_results)[1:20]
+    } else if (input$gene__source2 == "master_regulators") {
+      req(rv$mra_results)
+      gene_list <- rv$mra_results[,1]
+    } else if (input$gene__source2 == "gene_regulators") {
+      req(rv$wgcna_modules)
+      req(input$module_selection3)
+      gene_list <- rv$wgcna_modules %>%
+        filter(module == input$module_selection3) %>%
+        pull(gene) %>%
+        head(20)
+    }
+    
+    gene_query <- as.character(gene_list)
+    
+    withProgress(message = 'Searching databases...', value = 0, {
+      # Initialize results list
+      results_list <- list()
+      
+      results_list <- lapply(results_list, function(df) {
+        if(!is.null(df) && nrow(df) > 0) {
+          df$Drug_Name <- as.character(df$Drug_Name)
+          df$Target_Genes <- as.character(df$Target_Genes)
+          df$Source <- as.character(df$Source)
+          df$Binding_Type <- as.character(df$Binding_Type)
+          df$Affinity_Value <- as.numeric(df$Affinity_Value)
+          df$Approval_Status <- as.character(df$Approval_Status)
+          df$Indication <- as.character(df$Indication)
+        }
+        return(df)
+      })
+      
+      if (!is.null(results_list$chembl)) {
+        results_list$chembl$Drug_Name <- as.character(results_list$chembl$Drug_Name)
+      }
+      
+      if (!is.null(results_list$bindingdb)) {
+        results_list$bindingdb$Drug_Name <- as.character(results_list$bindingdb$Drug_Name)
+      }
+ 
+      
+      # Search ChEMBL
+      incProgress(0.3, detail = "Searching ChEMBL...")
+      chembl_data <- search_chembl(gene_query)  
+      results_list$chembl <- standardize_results(chembl_data, "ChEMBL")
+      
+      # Search BindingDB
+      incProgress(0.3, detail = "Searching BindingDB...")
+      bindingdb_data <- search_bindingdb(gene_query)  
+      results_list$bindingdb <- standardize_results(bindingdb_data, "BindingDB")
+      
+      # Combine all results
+      incProgress(0.4, detail = "Combining results...")
+      
+      valid_results <- list()
+      if (nrow(results_list$chembl) > 0) {
+        valid_results <- c(valid_results, list(results_list$chembl))
+      }
+      if (nrow(results_list$bindingdb) > 0) {
+        valid_results <- c(valid_results, list(results_list$bindingdb))
+      }
+      
+      if (length(valid_results) > 0) {
+        combined_results <- bind_rows(valid_results)
+      } else {
+        combined_results <- data.frame(
+          Drug_Name = character(0),
+          Target_Genes = character(0),
+          Source = character(0),
+          Binding_Type = character(0),
+          Affinity_Value = numeric(0),
+          Approval_Status = character(0),
+          Indication = character(0)
+        )
+      }
+      
+      # Store results
+      rv$all_results<-combined_results
+    })
+  })
+  
+  # Render consolidated results table
+  output$consolidated_results <- renderDT({
+    req(rv$all_results)
+    datatable(rv$all_results,
+              options = list(
+                pageLength = 10,
+                dom = 'Bfrtip',
+                buttons = c('copy', 'csv', 'excel'),
+                order = list(list(0, 'asc'))
+              ),
+              rownames = FALSE,
+              selection = 'none',
+              extensions = 'Buttons'
+    ) %>%
+      formatRound('Affinity_Value', 3)
+  })
+  
+  # Download handler
+  output$download_results <- downloadHandler(
+    filename = function() {
+      paste("drug_target_results_", Sys.Date(), ".csv", sep = "")
+    },
+    content = function(file) {
+      write.csv(rv$all_results, file, row.names = FALSE)
+    }
+  )
+
+
 }
 
 shinyApp(ui, server)
