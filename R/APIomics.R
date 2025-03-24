@@ -2212,12 +2212,9 @@ server <- function(input, output, session) {
     }
   )
   
-  
-  
-  
+
   
   observe({
-    req(input$gene_source)
     if(input$gene_source=="wgcna") 
     {
       req(rv$module_colors)
