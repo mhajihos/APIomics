@@ -103,7 +103,7 @@ search_chembl <- function(genes) {
                   standard_units = xml_text(xml_find_first(activity, ".//standard_units")) %||% NA,
                   max_phase = as.numeric(xml_text(xml_find_first(activity, ".//max_phase")) %||% NA),
                   indication_class = xml_text(xml_find_first(activity, ".//indication_class")) %||% NA,
-                  pubchem_cid = ifelse(!is.na(pubchem_cid), paste0("<a href='https://pubchem.ncbi.nlm.nih.gov/compound/", trimws(pubchem_cid), "' target='_blank'>", trimws(pubchem_cid), "</a>"), NA),
+                  pubchem_cid = trimws(pubchem_cid),
                   chembl_img_url = paste0("<a href='https://www.ebi.ac.uk/chembl/api/data/image/", molecule_id, ".svg' target='_blank'>View</a>"),
                   assay_description=xml_text(xml_find_first(activity, ".//assay_description")) %||% NA,
                   stringsAsFactors = FALSE
@@ -598,8 +598,6 @@ ui <- dashboardPage(
                       style = "font-size: 14px; "),
                     p("APIomics Pipeline",
                       style = "font-size: 16px; font-weight: bold;"),
-                    p("The gray boxes are under development.",
-                      style = "font-size: 16px; font-weight:"),
                     tags$img(src = "static/flowchart.jpg", height = "50%", width = "70%")
                     
                     
@@ -2219,8 +2217,8 @@ server <- function(input, output, session) {
   
   
   observe({
-    req(input$gene_source_db)
-    if(input$gene_source_db=="wgcna") 
+    req(input$gene_source)
+    if(input$gene_source=="wgcna") 
     {
       req(rv$module_colors)
       updateRadioButtons(
