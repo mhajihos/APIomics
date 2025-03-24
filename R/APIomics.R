@@ -2394,7 +2394,7 @@ server <- function(input, output, session) {
       
       rv$chembl_data <- search_chembl(gene_query)
       
-      rv$chembl_data2<-rv$chembl_data
+      rv$chembl_data2<-rv$chembl_data[,-12]
       rv$chembl_data2$molecule_pref_name <- paste0(
         '<a href="#" onclick="Shiny.setInputValue(\'selected_molecule\', \'', 
         rv$chembl_data$molecule_pref_name, '\', {priority: \'event\'}); return false;">', 
