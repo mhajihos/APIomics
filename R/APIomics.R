@@ -2397,7 +2397,7 @@ server <- function(input, output, session) {
       rv$chembl_data <- search_chembl(gene_query)
       
       rv$chembl_data2<-rv$chembl_data[,-12]
-      rv$chembl_data2$molecule_pref_name <- paste0(
+      rv$chembl_data$molecule_pref_name <- paste0(
         '<a href="#" onclick="Shiny.setInputValue(\'selected_molecule\', \'', 
         rv$chembl_data$molecule_pref_name, '\', {priority: \'event\'}); return false;">', 
         rv$chembl_data$molecule_pref_name, '</a>'
@@ -2411,7 +2411,7 @@ server <- function(input, output, session) {
       }
       
       output$chembl_results <- renderDT({
-        datatable(rv$chembl_data2, escape = FALSE, options = list(
+        datatable(rv$chembl_data, escape = FALSE, options = list(
           scrollX = TRUE, 
           pageLength = 5,
           autoWidth = TRUE,
@@ -2434,7 +2434,7 @@ server <- function(input, output, session) {
     # Download Handlers
     output$download_chembl <- downloadHandler(
       filename = function() { paste("ChEMBL_results_", Sys.Date(), ".csv", sep="") },
-      content = function(file) { write.csv(rv$chembl_data, file, row.names = FALSE) }
+      content = function(file) { write.csv(rv$chembl_data2, file, row.names = FALSE) }
     )
     
     output$download_bindingdb <- downloadHandler(
