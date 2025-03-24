@@ -1383,10 +1383,11 @@ server <- function(input, output, session) {
     V(network)$name <- gene_names
     # Calculate degree centrality for all nodes
     V(network)$degree <- degree(network, mode = "all")
+    sorted_nodes <- names(sort(V(network)$degree, decreasing = TRUE))
     # Order nodes by degree centrality
-    top_genes <- order(V(network)$degree, decreasing = TRUE)[1:input$top_regulators]
-    filtered_network <- induced_subgraph(network, vids = top_genes)
-    network<-filtered_network
+    top_nodes <- sorted_nodes[1:input$top_regulators]
+    sub_network <- induced_subgraph(network, vids = top_nodes)
+    network<-sub_network
     network_tidy <- as_tbl_graph(network)
     
     ggraph(network_tidy, layout = "fr") +
@@ -1524,9 +1525,10 @@ server <- function(input, output, session) {
       network <- graph_from_adjacency_matrix(TOM_module, mode = "undirected", weighted = TRUE)
       V(network)$name <- gene_names
       V(network)$degree <- degree(network, mode = "all")
-      top_genes <- order(V(network)$degree, decreasing = TRUE)[1:input$top_regulators]
-      filtered_network <- induced_subgraph(network, vids = top_genes)
-      network <- filtered_network
+      sorted_nodes <- names(sort(V(network)$degree, decreasing = TRUE))
+      top_nodes <- sorted_nodes[1:input$top_regulators]
+      sub_network <- induced_subgraph(network, vids = top_nodes)
+      network <- sub_network
       network_tidy <- as_tbl_graph(network)
       
       # Create plot
