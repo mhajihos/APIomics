@@ -442,6 +442,8 @@ ui <- dashboardPage(
                     actionButton("run_enrichment", "Run Enrichment"),
                     br(),
                     br(),
+                    numericInput("tom_thers", "Topological Overlap Threshold to Remove Weak Connections [0,1]", 
+                                 value = 0.2, min = 0,max=1),
                     numericInput("top_enriched", "Top Enriched Terms", 
                                  value = 10, min = 1)
                 ),
@@ -1245,6 +1247,7 @@ server <- function(input, output, session) {
       
     }
     
+    
     updateRadioButtons(
       session, 
       "module_selection", 
@@ -1356,53 +1359,73 @@ server <- function(input, output, session) {
   
   # Network with Plotly
   output$module_network <- renderPlot({
-    req(rv$TOM)
-    req(rv$wgcna_modules)
-    req(input$module_selection)
-    req(rv$net_colors)
-    req(rv$reg_data)
-    req(input$top_regulators)
+    req(rv$TOM)  # Ensure Topological Overlap Matrix exists
+    req(rv$wgcna_modules)  # Ensure module gene list exists
+    req(input$module_selection)  # Ensure a module is selected
+    req(rv$net_colors)  # Ensure colors exist
+    req(rv$reg_data)  # Ensure data is available
+    req(input$top_regulators)  # Ensure the user selects a number of top genes
     
-    reg_data1<-rv$reg_data[,-dim(rv$reg_data)[2]]
+    # Extract relevant expression data (excluding group column)
+    reg_data1 <- rv$reg_data[, -dim(rv$reg_data)[2]]
     
-    # Filter by selected group if not "All Groups"
-    if(input$selected_group != "All Groups") {
+    # Filter by selected group if necessary
+    if (input$selected_group != "All Groups") {
       group_indices <- which(rv$group_data$Group == input$selected_group)
-      reg_data1 <- reg_data1[group_indices,]
+      reg_data1 <- reg_data1[group_indices, ]
     }
     
-    datExpr <- reg_data1[,sapply(reg_data1, is.numeric)]
+    # Ensure matrix format
+    datExpr <- reg_data1[, sapply(reg_data1, is.numeric)]
     datExpr <- datExpr[complete.cases(datExpr), ]
-    datExpr=as.matrix(datExpr)
+    datExpr <- as.matrix(datExpr)
     
-    # Filter genes for the selected module and create a data frame
-    module_genes <- which(rv$net_colors==input$module_selection)
+    # Identify genes in the selected module
+    module_genes <- which(rv$net_colors == input$module_selection)
+
     gene_names <- colnames(datExpr)[module_genes]
+    
+    
+    # Subset TOM for selected genes
+    TOM_threshold <- input$tom_thers  # Adjust threshold: filtering threshold to remove weak edges
     TOM_module <- rv$TOM[module_genes, module_genes]
+    TOM_module[TOM_module < TOM_threshold] <- 0
+    # Construct network graph
     network <- graph_from_adjacency_matrix(TOM_module, mode = "undirected", weighted = TRUE)
     V(network)$name <- gene_names
-    # Calculate degree centrality for all nodes
-    V(network)$degree <- degree(network, mode = "all")
-    sorted_nodes <- names(sort(V(network)$degree, decreasing = TRUE))
-    # Order nodes by degree centrality
-    top_nodes <- sorted_nodes[1:input$top_regulators]
-    sub_network <- induced_subgraph(network, vids = top_nodes)
-    network<-sub_network
-    network_tidy <- as_tbl_graph(network)
     
+    # Compute degree centrality
+    V(network)$degree <- degree(network, mode = "all")
+    
+    # Sort nodes by degree centrality
+    degree_values <- setNames(V(network)$degree, V(network)$name)
+    sorted_nodes <- names(sort(degree_values, decreasing = TRUE))
+    
+    print(V(network)$degree)
+    # Select top genes based on centrality
+    top_nodes <- sorted_nodes[1:min(input$top_regulators, length(sorted_nodes))]
+    
+    # Create subgraph with top central genes
+    sub_network <- induced_subgraph(network, vids = top_nodes)
+    
+    # Convert to tidygraph format for visualization
+    network_tidy <- as_tbl_graph(sub_network)
+    
+    # Plot network
     ggraph(network_tidy, layout = "fr") +
       geom_edge_link(aes(edge_alpha = weight), show.legend = FALSE) +
-      geom_node_point(aes(color = input$module_selection), size = 3) +
-      geom_node_text(aes(label = name), size = 4,repel=T, max.overlaps = 50) + 
-      scale_color_manual(values =input$module_selection) +            
-      theme_void() +theme(legend.position = "none")+
-      ggtitle(paste("Network for Module:", input$module_selection,
-                    "\nTop", input$top_regulators, "Genes",
-                    if(input$selected_group != "All Groups") 
-                      paste("\nGroup:", input$selected_group) else ""))
-    
-    
+      geom_node_point(aes(color = input$module_selection), size = 5) +
+      geom_node_text(aes(label = name), size = 4, repel = TRUE, max.overlaps = 50) +
+      scale_color_manual(values = input$module_selection) +
+      theme_void() +
+      theme(legend.position = "none") +
+      ggtitle(paste(
+        "Network for Module:", input$module_selection,
+        "\nTop", input$top_regulators, "Genes",
+        if (input$selected_group != "All Groups") paste("\nGroup:", input$selected_group) else ""
+      ))
   })
+  
   
   
   # Heatmap download handler
