@@ -399,8 +399,8 @@ ui <- dashboardPage(
                     br(),
                     br(),
                     radioButtons("module_selection", "Select Module", choices = c("To See Modules, Run Analysis First")),
-                    numericInput("tom_thers", "Topological Overlap Threshold to Remove Weak Connections [0,1]", 
-                                 value = 0.2, min = 0,max=1),
+                    numericInput("tom_thers", "Topological Overlap Threshold to Remove Weak Connections in the Network [0,1]", 
+                                 value = 0.01, min = 0,max=1),
                     numericInput("top_regulators", "Number of Top Genes for Plots", 
                                  value = 20, min = 1),
                     uiOutput("group_filter_radio")
