@@ -1401,7 +1401,6 @@ server <- function(input, output, session) {
     degree_values <- setNames(V(network)$degree, V(network)$name)
     sorted_nodes <- names(sort(degree_values, decreasing = TRUE))
     
-    print(V(network)$degree)
     # Select top genes based on centrality
     top_nodes <- sorted_nodes[1:min(input$top_regulators, length(sorted_nodes))]
     
