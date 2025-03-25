@@ -445,7 +445,7 @@ ui <- dashboardPage(
                     numericInput("tom_thers", "Topological Overlap Threshold to Remove Weak Connections [0,1]", 
                                  value = 0.2, min = 0,max=1),
                     numericInput("top_enriched", "Top Enriched Terms", 
-                                 value = 10, min = 1)
+                                 value = 20, min = 1)
                 ),
                 box(title = "Enrichment Results", status = "info", solidHeader = TRUE,
                     DTOutput("enrichment_table"),
