@@ -295,7 +295,7 @@ ui <- dashboardPage(
       tabItem(tabName = "data_input",
               fluidRow(
                 box(title = "Upload Expression Data", status = "primary", solidHeader = TRUE, 
-                    fileInput("expression_file", "Choose CSV File", 
+                    fileInput("expression_file", "Choose CSV File (Max 1GB)", 
                               accept = c(".csv", ".txt", ".tsv")),
                     checkboxInput("normalized_data", "Normalized Data", FALSE),
                     radioButtons("file_type", "File Type",
