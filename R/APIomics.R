@@ -997,7 +997,7 @@ server <- function(input, output, session) {
       heatmap_data <- rv$deg_data %>%
         dplyr::select(all_of(c(intersect(rownames(top_genes), numeric_cols), group_col)))
       heatmap_data=data.frame(heatmap_data)
-      heatmap_data=heatmap_data[order(heatmap_data[,dim(heatmap_data)[2]]),]
+      #heatmap_data=heatmap_data[order(heatmap_data[,dim(heatmap_data)[2]]),]
       
       
       col <- colorRampPalette(rev(RColorBrewer::brewer.pal(n = 10, name = "RdYlBu")))(100)
@@ -1046,7 +1046,7 @@ server <- function(input, output, session) {
         heatmap_data <- rv$deg_data %>%
           dplyr::select(all_of(c(intersect(rownames(top_genes), numeric_cols), group_col)))
         heatmap_data=data.frame(heatmap_data)
-        heatmap_data=heatmap_data[order(heatmap_data[,dim(heatmap_data)[2]]),]
+        #heatmap_data=heatmap_data[order(heatmap_data[,dim(heatmap_data)[2]]),]
         
         
         col <- colorRampPalette(rev(RColorBrewer::brewer.pal(n = 10, name = "RdYlBu")))(100)
@@ -1063,7 +1063,7 @@ server <- function(input, output, session) {
         tiff(file, width = width, height = height, units = "in", res = res)
         # Create heatmap using gplots
         heatmap.2(
-          data_matrix, 
+          heatmap_data, 
           scale = "column", 
           col = col, 
           Rowv = FALSE, 
@@ -1072,7 +1072,7 @@ server <- function(input, output, session) {
           trace = "none", 
           margins = c(10, 15),
           main = "Gene Expression Heatmap",
-          RowSideColors = row_side_colors,
+          #RowSideColors = row_side_colors,
           keysize = 1,  
           density.info = "none",  
           key = TRUE  
