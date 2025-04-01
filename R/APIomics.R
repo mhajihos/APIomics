@@ -193,6 +193,7 @@ search_bindingdb <- function(genes) {
 }
 
 
+options(shiny.maxRequestSize = 100*1024^2)
 
 # Helper function to safely handle NULL values
 `%||%` <- function(x, y) if (is.null(x)) y else x
