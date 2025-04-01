@@ -1047,7 +1047,7 @@ server <- function(input, output, session) {
           dplyr::select(all_of(c(intersect(rownames(top_genes), numeric_cols), group_col)))
         heatmap_data=data.frame(heatmap_data)
         #heatmap_data=heatmap_data[order(heatmap_data[,dim(heatmap_data)[2]]),]
-        
+        data_matrix<-heatmap_data[,-dim(heatmap_data)[2]]
         
         col <- colorRampPalette(rev(RColorBrewer::brewer.pal(n = 10, name = "RdYlBu")))(100)
         
@@ -1063,7 +1063,7 @@ server <- function(input, output, session) {
         tiff(file, width = width, height = height, units = "in", res = res)
         # Create heatmap using gplots
         heatmap.2(
-          as.matrix(heatmap_data), 
+          as.matrix(data_matrix), 
           scale = "column", 
           col = col, 
           Rowv = FALSE, 
