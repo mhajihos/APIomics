@@ -638,7 +638,7 @@ ui <- dashboardPage(
 
 server <- function(input, output, session) {
   # Reactive values to store data across tabs
-
+  options(shiny.maxRequestSize = 100*1024^2)
 
 
   rv <- reactiveValues(
