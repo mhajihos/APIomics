@@ -1004,7 +1004,7 @@ server <- function(input, output, session) {
       ByPal <- colorRampPalette(c('yellow','purple'))
       # Create plot
       heatmap_plot<-heatmaply(heatmap_data[,-dim(heatmap_data)[2]],column_text_angle=90,Rowv = F, Colv = F,colors =col ,scale = "column",
-                              row_side_colors=heatmap_data[,dim(heatmap_data)[2]],row_side_palette= ByPal,
+                              row_side_colors=as.factor(heatmap_data[,dim(heatmap_data)[2]]),row_side_palette= ByPal,
                               showticklabels = c(TRUE, FALSE))
     })
     
@@ -1016,6 +1016,11 @@ server <- function(input, output, session) {
         paste("heatmap_plot", Sys.Date(), ".tiff", sep = "")
       },
       content = function(file) {
+        
+        withProgress(message = "Generating heatmap...", value = 0, {
+          incProgress(0.3)
+          
+          
         width <- input$heatmap_width
         height <- input$heatmap_height
         res <- input$heatmap_res
@@ -1036,6 +1041,8 @@ server <- function(input, output, session) {
         if(nrow(top_genes) == 0) {
           return(NULL)
         }
+        
+        incProgress(0.6)
         
         # Prepare data for plotting
         # Extract only numeric columns and the group column
@@ -1059,6 +1066,8 @@ server <- function(input, output, session) {
           unique_groups
         )
         row_side_colors <- group_colors[as.character(heatmap_data[,group_col])]
+        
+        incProgress(0.8)
         
         tiff(file, width = width, height = height, units = "in", res = res)
         # Create heatmap using gplots
@@ -1091,6 +1100,9 @@ server <- function(input, output, session) {
         )
         
         dev.off()
+        
+        incProgress(1)
+        })
       }
     )
     
