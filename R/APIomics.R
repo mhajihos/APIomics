@@ -36,6 +36,7 @@ APIomics<-function()
   suppressMessages(suppressWarnings(library(DOSE)))
   suppressMessages(suppressWarnings(library(visNetwork)))
   suppressMessages(suppressWarnings(library(xml2)))
+  suppressMessages(suppressWarnings(library(data.table)))
 allowWGCNAThreads() 
 
 
@@ -538,7 +539,7 @@ ui <- dashboardPage(
               fluidRow(
                 box(title = "Gene Disease Network Analysis", status = "primary", solidHeader = TRUE, width = 12,
                     selectInput("gene_source", "Select Source of Genes:",
-                                choices = c("DEG Analysis" = "deg",
+                                choices = c("DEG Analysis [Top 20 Genes]" = "deg",
                                             "Master Regulators" = "mra",
                                             "Gene Regulators (WGCNA)" = "wgcna")),
                     numericInput("qvalue_threshold_DEGEN", "q-value Threshold for the Results", 
@@ -677,8 +678,8 @@ server <- function(input, output, session) {
     
     # Read file based on selected type
     if (input$file_type == "csv") {
-      data <- read.csv(input$expression_file$datapath, 
-                       header = input$header)
+      data <- fread(input$expression_file$datapath)
+      data<-data.frame(data)
       rownames(data)<-data[,1]
       data<-data[,-1]
     } else if (input$file_type == "tsv") {
@@ -1625,8 +1626,9 @@ server <- function(input, output, session) {
             pvalueCutoff = input$GSEA_pvalue_threshold
           )
         } else if (input$enrichment_type == "kegg") {
+          gene_ids <- bitr(genes, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Hs.eg.db)
           enrichment_results <- gseKEGG(
-            geneList = gene_list,
+            geneList = gene_ids,
             organism = "hsa",
             pvalueCutoff = input$GSEA_pvalue_threshold
           )
@@ -2272,7 +2274,7 @@ server <- function(input, output, session) {
     gene_list <- NULL
     if (input$gene_source == "deg") {
       req(rv$deg_results)
-      gene_list <- rownames(rv$deg_results)
+      gene_list <- rownames(rv$deg_results)[1:20]
     } else if (input$gene_source == "mra") {
       req(rv$mra_results)
       gene_list <- rv$mra_results[,1]
