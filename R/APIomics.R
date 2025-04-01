@@ -997,14 +997,14 @@ server <- function(input, output, session) {
       heatmap_data <- rv$deg_data %>%
         dplyr::select(all_of(c(intersect(rownames(top_genes), numeric_cols), group_col)))
       heatmap_data=data.frame(heatmap_data)
-      #heatmap_data=heatmap_data[order(heatmap_data[,dim(heatmap_data)[2]]),]
+      heatmap_data=heatmap_data[order(heatmap_data[,dim(heatmap_data)[2]]),]
       
       
       col <- colorRampPalette(rev(RColorBrewer::brewer.pal(n = 10, name = "RdYlBu")))(100)
       ByPal <- colorRampPalette(c('yellow','purple'))
       # Create plot
       heatmap_plot<-heatmaply(heatmap_data[,-dim(heatmap_data)[2]],column_text_angle=90,Rowv = F, Colv = F,colors =col ,scale = "column",
-                              #row_side_colors=heatmap_data[,dim(heatmap_data)[2]],row_side_palette= ByPal,
+                              row_side_colors=heatmap_data[,dim(heatmap_data)[2]],row_side_palette= ByPal,
                               showticklabels = c(TRUE, FALSE))
     })
     
