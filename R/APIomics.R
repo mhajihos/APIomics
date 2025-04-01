@@ -193,7 +193,7 @@ search_bindingdb <- function(genes) {
 }
 
 
-options(shiny.maxRequestSize = 100*1024^2)
+options(shiny.maxRequestSize = 1024*1024^2)
 
 # Helper function to safely handle NULL values
 `%||%` <- function(x, y) if (is.null(x)) y else x
@@ -639,7 +639,7 @@ ui <- dashboardPage(
 
 server <- function(input, output, session) {
   # Reactive values to store data across tabs
-  options(shiny.maxRequestSize = 100*1024^2)
+
 
 
   rv <- reactiveValues(
