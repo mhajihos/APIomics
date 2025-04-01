@@ -1004,7 +1004,7 @@ server <- function(input, output, session) {
       ByPal <- colorRampPalette(c('yellow','purple'))
       # Create plot
       heatmap_plot<-heatmaply(heatmap_data[,-dim(heatmap_data)[2]],column_text_angle=90,Rowv = F, Colv = F,colors =col ,scale = "column",
-                              row_side_colors=heatmap_data[,dim(heatmap_data)[2]],row_side_palette= ByPal,
+                              #row_side_colors=heatmap_data[,dim(heatmap_data)[2]],row_side_palette= ByPal,
                               showticklabels = c(TRUE, FALSE))
     })
     
@@ -1331,7 +1331,7 @@ server <- function(input, output, session) {
     
     
     mod_mat <- data.frame(mod_mat, group_data)
-    mod_mat <- mod_mat[order(mod_mat[,dim(mod_mat)[2]]),]
+    #mod_mat <- mod_mat[order(mod_mat[,dim(mod_mat)[2]]),]
     
     
     col <- colorRampPalette(rev(RColorBrewer::brewer.pal(n = 10, name = "RdYlBu")))(100)
