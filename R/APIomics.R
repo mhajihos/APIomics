@@ -1063,7 +1063,7 @@ server <- function(input, output, session) {
         tiff(file, width = width, height = height, units = "in", res = res)
         # Create heatmap using gplots
         heatmap.2(
-          heatmap_data, 
+          as.matrix(heatmap_data), 
           scale = "column", 
           col = col, 
           Rowv = FALSE, 
