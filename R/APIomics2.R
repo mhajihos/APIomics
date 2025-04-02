@@ -269,6 +269,12 @@ ui <- dashboardPage(
                     background-color: transparent;
                     border-bottom: 1px solid #e9ecef;
                 }
+                .plotly-container .colorbar {
+                    transform: translate(50px, -100px) !important;
+                      }
+                .plotly-container .legend {
+                  transform: translate(50px, 100px) !important;
+                      }
             "))
     ),
     sidebarMenu(
@@ -979,6 +985,7 @@ server <- function(input, output, session) {
     )
     
     
+    
     # First, add this reactive expression somewhere before your outputs:
     filtered_deg_results <- reactive({
       req(rv$deg_results)
@@ -987,6 +994,7 @@ server <- function(input, output, session) {
                  abs(logFC) > input$logfc_threshold) %>%
         arrange(adj.P.Val)
     })
+    
     
     # Theatmap plot:
     output$heatmap_plot <- renderPlotly({
@@ -1027,7 +1035,7 @@ server <- function(input, output, session) {
       ByPal <- colorRampPalette(c('yellow','purple'))
       
       # Create optimized heatmap
-      heatmaply(
+      p <- heatmaply(
         heatmap_data[,-dim(heatmap_data)[2]], 
         column_text_angle = 90,
         Rowv = FALSE, 
@@ -1036,12 +1044,45 @@ server <- function(input, output, session) {
         scale = "column",
         row_side_colors = as.factor(heatmap_data[,dim(heatmap_data)[2]]),
         row_side_palette = ByPal,
-        showticklabels = c(TRUE, FALSE), 
+        showticklabels = c(TRUE, FALSE),
         plot_method = "plotly",
-        margins = c(50, 50, 40, 0), 
-        legend_side = "top",         
-        row_side_colors_legend_side = "top"
+        show_dendrogram = c(FALSE, FALSE),
+        hide_colorbar = FALSE
       )
+      
+      # Extract the plotly object
+      p_plotly <- plotly_build(p)
+      
+      # Add custom legends with clear positioning
+      for (i in seq_along(p_plotly$x$data)) {
+        if (!is.null(p_plotly$x$data[[i]]$colorbar)) {
+          # This is the main heatmap trace with the colorbar
+          p_plotly$x$data[[i]]$colorbar$title <- "Expression Value"
+          p_plotly$x$data[[i]]$colorbar$len <- 0.5  # Length of colorbar (0-1)
+          p_plotly$x$data[[i]]$colorbar$y <- 0.8    # Position vertically (0-1)
+          p_plotly$x$data[[i]]$colorbar$x <- 1.05   # Position horizontally
+          p_plotly$x$data[[i]]$colorbar$thickness <- 15  # Width of colorbar
+        }
+      }
+      
+      # Add legend for groups
+      p_final <- layout(p_plotly,
+                        showlegend = TRUE,
+                        legend = list(
+                          title = list(text = group_col),
+                          x = 1.05,  # Position outside the plot
+                          y = 0.3    # Position lower on the right
+                        ),
+                        # Adjust margins to make room for legends
+                        margin = list(
+                          r = 150,  # Right margin
+                          t = 50,   # Top margin
+                          b = 50,   # Bottom margin
+                          l = 50    # Left margin
+                        )
+      )
+      
+      return(p_final)
     })
     
     
@@ -2397,7 +2438,23 @@ server <- function(input, output, session) {
       visNetwork(nodes, edges) %>%
         visOptions(highlightNearest = TRUE, nodesIdSelection = TRUE) %>%
         visInteraction(zoomView = TRUE, dragNodes = TRUE, dragView = TRUE) %>%
-        visPhysics(enabled = TRUE)
+        visPhysics(
+          solver = "forceAtlas2Based",
+          forceAtlas2Based = list(
+            gravitationalConstant = -50,
+            centralGravity = 0.01,
+            springConstant = 0.08,
+            springLength = 100,
+            damping = 0.4,
+            avoidOverlap = 0.5
+          ),
+          stabilization = list(
+            enabled = TRUE,
+            iterations = 1000,  # Increase iterations for better initial positioning
+            updateInterval = 100,
+            fit = TRUE
+          )
+        )
     })
     
     
