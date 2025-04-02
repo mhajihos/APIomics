@@ -1090,106 +1090,94 @@ APIomics<-function()
       # Heatmap TIFF download handler
       output$download_heatmap_tiff <- downloadHandler(
         filename = function() {
-          paste("heatmap_plot_", Sys.Date(), ".tiff", sep = "")
+          paste("heatmap_plot", Sys.Date(), ".tiff", sep = "")
         },
         content = function(file) {
-          width <- input$heatmap_width
-          height <- input$heatmap_height
-          res <- input$heatmap_res
           
-          # Validate data
-          if(is.null(rv$deg_results) || is.null(rv$deg_data)) {
-            # Return a placeholder or error image instead of NULL
-            tiff(file, width = 5, height = 5, units = "in", res = 72)
-            plot(1, type="n", main="No Data Available", xlab="", ylab="")
-            text(1, 1, "No gene expression data available")
+            req(rv$deg_data, rv$deg_results)
+            
+            width <- input$heatmap_width
+            height <- input$heatmap_height
+            res <- input$heatmap_res
+            
+            # Validate data
+            if(is.null(rv$deg_results) || is.null(rv$deg_data)) {
+              return(NULL)
+            }
+            
+            # Select top significant genes
+            top_genes <- rv$deg_results %>%
+              filter(adj.P.Val < input$qvalue_threshold & 
+                       abs(logFC) > input$logfc_threshold) %>%
+              arrange(adj.P.Val) %>%
+              head(20)
+            
+            # Ensure we have genes
+            if(nrow(top_genes) == 0) {
+              return(NULL)
+            }
+            
+
+            # Prepare data for plotting
+            # Extract only numeric columns and the group column
+            numeric_cols <- names(rv$deg_data)[sapply(rv$deg_data, is.numeric)]
+            group_col <- input$comparison_group
+            
+            # Subset data to include only top genes
+            heatmap_data <- rv$deg_data %>%
+              dplyr::select(all_of(c(intersect(rownames(top_genes), numeric_cols), group_col)))
+            heatmap_data=data.frame(heatmap_data)
+            heatmap_data=heatmap_data[order(heatmap_data[,dim(heatmap_data)[2]]),]
+            data_matrix<-heatmap_data[,-dim(heatmap_data)[2]]
+            
+            col <- colorRampPalette(rev(RColorBrewer::brewer.pal(n = 10, name = "RdYlBu")))(100)
+            
+            
+            # Generate unique colors for groups
+            unique_groups <- unique(heatmap_data[,group_col])
+            group_colors <- setNames(
+              RColorBrewer::brewer.pal(min(length(unique_groups), 8), "Set2")[1:length(unique_groups)],
+              unique_groups
+            )
+            row_side_colors <- group_colors[as.character(heatmap_data[,group_col])]
+            
+ 
+            tiff(file, width = width, height = height, units = "in", res = res)
+            # Create heatmap using gplots
+            heatmap.2(
+              as.matrix(data_matrix), 
+              scale = "column", 
+              col = col, 
+              Rowv = FALSE, 
+              Colv = FALSE, 
+              dendrogram = "none", 
+              trace = "none", 
+              margins = c(10, 15),
+              main = "Gene Expression Heatmap",
+              RowSideColors = row_side_colors,
+              keysize = 1,  
+              density.info = "none",  
+              key = TRUE  
+            )
+            
+            # Add a legend for group colors
+            legend(
+              "topright", 
+              legend = names(group_colors), 
+              col = group_colors, 
+              lty = 1, 
+              lwd = 10, 
+              xpd = TRUE,
+              title = group_col,
+              cex = 0.8
+            )
+            
             dev.off()
-            return()
-          }
-          
-          # Select top significant genes
-          top_genes <- rv$deg_results %>%
-            filter(adj.P.Val < input$qvalue_threshold & 
-                     abs(logFC) > input$logfc_threshold) %>%
-            arrange(adj.P.Val) %>%
-            head(20)
-          
-          # Ensure we have genes
-          if(nrow(top_genes) == 0) {
-            # Return a placeholder or error image instead of NULL
-            tiff(file, width = 5, height = 5, units = "in", res = 72)
-            plot(1, type="n", main="No Significant Genes Found", xlab="", ylab="")
-            text(1, 1, "Try adjusting threshold parameters")
-            dev.off()
-            return()
-          }
-          
-          # Prepare data for plotting
-          numeric_cols <- names(rv$deg_data)[sapply(rv$deg_data, is.numeric)]
-          group_col <- input$comparison_group
-          
-          # Subset data to include only top genes and ensure they're in the data
-          gene_names <- rownames(top_genes)
-          gene_names <- gene_names[gene_names %in% numeric_cols]
-          
-          if(length(gene_names) == 0) {
-            tiff(file, width = 5, height = 5, units = "in", res = 72)
-            plot(1, type="n", main="Gene Name Mismatch", xlab="", ylab="")
-            text(1, 1, "Gene names in results don't match data columns")
-            dev.off()
-            return()
-          }
-          
-          # Subset data properly
-          heatmap_data <- rv$deg_data %>%
-            dplyr::select(all_of(c(gene_names, group_col)))
-          
-          # Order by group
-          heatmap_data <- heatmap_data[order(heatmap_data[,group_col]),]
-          
-          # Prepare the data matrix for plotting
-          data_matrix <- as.matrix(heatmap_data[,gene_names])
-          rownames(data_matrix) <- rownames(heatmap_data)
-          
-          # Create color palette
-          col <- colorRampPalette(rev(RColorBrewer::brewer.pal(n = 10, name = "RdYlBu")))(100)
-          
-          # Create annotations for the heatmap
-          ann_colors <- list()
-          annotation_col <- data.frame(Group = heatmap_data[,group_col])
-          rownames(annotation_col) <- rownames(heatmap_data)
-          
-          # Open TIFF device
-          tiff(file, width = width, height = height, units = "in", res = res)
-          
-          # Create heatmap
-          heatmap.2(
-            data_matrix, 
-            scale = "column", 
-            col = col, 
-            Rowv = FALSE, 
-            Colv = FALSE, 
-            dendrogram = "none", 
-            trace = "none", 
-            margins = c(10, 15),
-            main = "Gene Expression Heatmap",
-            keysize = 1,  
-            density.info = "none",  
-            key = TRUE,
-            RowSideColors = as.character(factor(heatmap_data[,group_col], 
-                                                labels = rainbow(length(unique(heatmap_data[,group_col])))))
-          )
-          
-          # Add legend for groups
-          legend("topright", 
-                 legend = unique(heatmap_data[,group_col]), 
-                 fill = rainbow(length(unique(heatmap_data[,group_col]))), 
-                 title = group_col, 
-                 cex = 0.8)
-          
-          dev.off()
         }
       )
+      
+      
+      
     
     
     
