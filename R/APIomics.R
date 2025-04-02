@@ -996,7 +996,7 @@ APIomics<-function()
       })
       
       
-      # Theatmap plot:
+      # heatmap plot:
       output$heatmap_plot <- renderPlotly({
         req(filtered_deg_results(), rv$deg_data)
         
@@ -1196,7 +1196,7 @@ APIomics<-function()
       }
     )
     
-    
+  })    
     
     
     # Gene Regulators Tab
