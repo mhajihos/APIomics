@@ -1093,10 +1093,8 @@ APIomics<-function()
           paste("heatmap_plot", Sys.Date(), ".tiff", sep = "")
         },
         content = function(file) {
-          
           withProgress(message = "Generating heatmap...", value = 0, {
             incProgress(0.3)
-            
             
             width <- input$heatmap_width
             height <- input$heatmap_height
@@ -1122,19 +1120,16 @@ APIomics<-function()
             incProgress(0.6)
             
             # Prepare data for plotting
-            # Extract only numeric columns and the group column
             numeric_cols <- names(rv$deg_data)[sapply(rv$deg_data, is.numeric)]
             group_col <- input$comparison_group
             
             # Subset data to include only top genes
             heatmap_data <- rv$deg_data %>%
               dplyr::select(all_of(c(intersect(rownames(top_genes), numeric_cols), group_col)))
-            heatmap_data=data.frame(heatmap_data)
-            #heatmap_data=heatmap_data[order(heatmap_data[,dim(heatmap_data)[2]]),]
-            data_matrix<-heatmap_data[,-dim(heatmap_data)[2]]
+            heatmap_data <- data.frame(heatmap_data)
+            data_matrix <- heatmap_data[,-dim(heatmap_data)[2]]
             
             col <- colorRampPalette(rev(RColorBrewer::brewer.pal(n = 10, name = "RdYlBu")))(100)
-            
             
             # Generate unique colors for groups
             unique_groups <- unique(heatmap_data[,group_col])
@@ -1146,8 +1141,10 @@ APIomics<-function()
             
             incProgress(0.8)
             
+            # Open TIFF device
             tiff(file, width = width, height = height, units = "in", res = res)
-            # Create heatmap using gplots
+            
+            # Create heatmap directly
             heatmap.2(
               as.matrix(data_matrix), 
               scale = "column", 
@@ -1158,13 +1155,12 @@ APIomics<-function()
               trace = "none", 
               margins = c(10, 15),
               main = "Gene Expression Heatmap",
-              #RowSideColors = row_side_colors,
               keysize = 1,  
               density.info = "none",  
               key = TRUE  
             )
             
-            # Add a legend for group colors
+            # Add legend directly (not piped)
             legend(
               "topright", 
               legend = names(group_colors), 
@@ -1176,6 +1172,7 @@ APIomics<-function()
               cex = 0.8
             )
             
+            # Close the device to save the file
             dev.off()
             
             incProgress(1)
