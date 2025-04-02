@@ -39,7 +39,8 @@ Imports:
     httr,
     jsonlite,
     rentrez,
-    visNetwork
+    visNetwork,
+    data.table
 Suggests:
     limma,
     edgeR,
