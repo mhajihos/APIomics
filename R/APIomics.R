@@ -539,7 +539,7 @@ ui <- dashboardPage(
               fluidRow(
                 box(title = "Gene Disease Network Analysis", status = "primary", solidHeader = TRUE, width = 12,
                     selectInput("gene_source", "Select Source of Genes:",
-                                choices = c("DEG Analysis [Top 20 Genes]" = "deg",
+                                choices = c("DEG Analysis (Top 20 Genes)" = "deg",
                                             "Master Regulators" = "mra",
                                             "Gene Regulators (WGCNA)" = "wgcna")),
                     numericInput("qvalue_threshold_DEGEN", "q-value Threshold for the Results", 
@@ -1005,7 +1005,7 @@ server <- function(input, output, session) {
       ByPal <- colorRampPalette(c('yellow','purple'))
       # Create plot
       heatmap_plot<-heatmaply(heatmap_data[,-dim(heatmap_data)[2]],column_text_angle=90,Rowv = F, Colv = F,colors =col ,scale = "column",
-                              row_side_colors=as.factor(heatmap_data[,dim(heatmap_data)[2]]),row_side_palette= ByPal,
+                              row_side_colors=as.numeric(as.factor(heatmap_data[,dim(heatmap_data)[2]])),row_side_palette= ByPal,
                               showticklabels = c(TRUE, FALSE))
     })
     
@@ -1626,7 +1626,7 @@ server <- function(input, output, session) {
             pvalueCutoff = input$GSEA_pvalue_threshold
           )
         } else if (input$enrichment_type == "kegg") {
-          gene_ids <- bitr(genes, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Hs.eg.db)
+          gene_ids <- bitr(gene_list, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Hs.eg.db)
           enrichment_results <- gseKEGG(
             geneList = gene_ids,
             organism = "hsa",
