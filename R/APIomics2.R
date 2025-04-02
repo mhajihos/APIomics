@@ -1,6 +1,6 @@
 #Main-Shiny_App_Code
 
-APIomics<-function()
+APIomics2<-function()
 {
 #Packages
 
@@ -212,7 +212,7 @@ ui <- dashboardPage(
                 <circle cx="50" cy="50" r="45" fill="#007bff"/>
                 <text x="50" y="60" text-anchor="middle" fill="white" font-size="30" font-weight="bold">API</text>
             </svg>'),
-      span("APIomics v1.0", style = "margin-left: 10px; font-weight: 600; color: #333;"),
+      span("APIomics v1.1", style = "margin-left: 10px; font-weight: 600; color: #333;"),
       style = "display: flex; align-items: center; font-size: 22px;"
     ),
     titleWidth = 250,
@@ -372,14 +372,14 @@ ui <- dashboardPage(
               
               fluidRow(
                 box(title = "Volcano Plot", status = "success", solidHeader = TRUE, collapsible = TRUE,
-                    plotlyOutput("volcano_plot", height = 600),
+                    plotlyOutput("volcano_plot", height = 500),
                     sliderInput("volcano_width", "Width (inches)", min = 4, max = 20, value = 8,width='400px'),
                     sliderInput("volcano_height", "Height (inches)", min = 4, max = 20, value = 8,width='400px'),
                     numericInput("volcano_res", "Resolution (dpi)", value = 300, min = 100),
                     downloadButton("download_volcano_tiff", "Download Volcano Plot (TIFF)")
                 ),
                 box(title = "Heatmap (Top 20)", status = "success", solidHeader = TRUE, collapsible = TRUE,
-                    plotlyOutput("heatmap_plot", height = 600),
+                    plotlyOutput("heatmap_plot", height = 500),
                     sliderInput("heatmap_width", "Width (inches)", min = 4, max = 20, value = 8,width='400px'),
                     sliderInput("heatmap_height", "Height (inches)", min = 4, max = 20, value = 8,width='400px'),
                     numericInput("heatmap_res", "Resolution (dpi)", value = 300, min = 100),
@@ -885,29 +885,47 @@ server <- function(input, output, session) {
                 options = list(scrollX = TRUE,pageLength = 5))
     })
     
+    
+    filtered_deg_results <- reactive({
+      req(rv$deg_results)
+      rv$deg_results %>%
+        filter(adj.P.Val < input$qvalue_threshold & 
+                 abs(logFC) > input$logfc_threshold) %>%
+        arrange(adj.P.Val)
+    })
+    
+    
     # Volcano Plot
     output$volcano_plot <- renderPlotly({
-      if(!is.null(deg_results)) {
-        deg_results$Significance <- ifelse(
-          deg_results$adj.P.Val < input$qvalue_threshold & 
-            abs(deg_results$logFC) > input$logfc_threshold, 
-          "Significant", "Not Significant"
-        )
-        plot_ly(
-          data = deg_results,
-          x = ~logFC, 
-          y = ~-log10(adj.P.Val),
-          text = ~paste(
-            "Gene: ", rownames(deg_results), 
-            "<br>Log2 Fold Change: ", round(logFC, 2),
-            "<br>Adjusted P-value: ", round(adj.P.Val, 4)
-          ),
-          hoverinfo = 'text',
-          mode = 'markers',
-          color = ~Significance,
-          colors = c('Significant' = 'red', 'Not Significant' = 'black'),
-          type = 'scatter'
-        ) %>%
+      req(filtered_deg_results())
+      
+      # Get data with significance already calculated
+      plot_data <- filtered_deg_results()
+      plot_data$Significance <- "Significant"
+      
+      # Add a sample of non-significant points (improves performance)
+      non_sig <- rv$deg_results %>%
+        filter(!(adj.P.Val < input$qvalue_threshold & abs(logFC) > input$logfc_threshold)) %>%
+        sample_n(min(1000, nrow(.)))
+      non_sig$Significance <- "Not Significant"
+      
+      plot_data <- rbind(plot_data, non_sig)
+      
+      plot_ly(
+        data = plot_data,
+        x = ~logFC, 
+        y = ~-log10(adj.P.Val),
+        text = ~paste(
+          "Gene: ", rownames(plot_data), 
+          "<br>Log2 Fold Change: ", round(logFC, 2),
+          "<br>Adjusted P-value: ", round(adj.P.Val, 4)
+        ),
+        hoverinfo = 'text',
+        mode = 'markers',
+        color = ~Significance,
+        colors = c('Significant' = 'red', 'Not Significant' = 'black'),
+        type = 'scatter'
+      ) %>%
           layout(
             title = "Interactive Volcano Plot",
             xaxis = list(title = "Log2 Fold Change"),
@@ -931,7 +949,6 @@ server <- function(input, output, session) {
               )
             )
           )
-      }
     })
     
     
@@ -962,21 +979,26 @@ server <- function(input, output, session) {
     )
     
     
+    # First, add this reactive expression somewhere before your outputs:
+    filtered_deg_results <- reactive({
+      req(rv$deg_results)
+      rv$deg_results %>%
+        filter(adj.P.Val < input$qvalue_threshold & 
+                 abs(logFC) > input$logfc_threshold) %>%
+        arrange(adj.P.Val)
+    })
+    
+    # Theatmap plot:
     output$heatmap_plot <- renderPlotly({
-      req(rv$deg_results, rv$deg_data)
+      req(filtered_deg_results(), rv$deg_data)
       
-        # Validate data
-      if(is.null(rv$deg_results) || is.null(rv$deg_data)) {
+      # Validate data
+      if(is.null(filtered_deg_results()) || is.null(rv$deg_data)) {
         return(NULL)
       }
       
-      # Select top significant genes
-      top_genes <- rv$deg_results %>%
-        filter(adj.P.Val < input$qvalue_threshold & 
-                 abs(logFC) > input$logfc_threshold) %>%
-        arrange(adj.P.Val) %>%
-        head(20)
-      
+      # Get top genes from the pre-filtered dataset
+      top_genes <- head(filtered_deg_results(), 20)
       
       # Ensure we have genes
       if(nrow(top_genes) == 0) {
@@ -988,7 +1010,7 @@ server <- function(input, output, session) {
         )
         return(NULL)
       }
- 
+      
       # Prepare data for plotting
       # Extract only numeric columns and the group column
       numeric_cols <- names(rv$deg_data)[sapply(rv$deg_data, is.numeric)]
@@ -997,16 +1019,29 @@ server <- function(input, output, session) {
       # Subset data to include only top genes
       heatmap_data <- rv$deg_data %>%
         dplyr::select(all_of(c(intersect(rownames(top_genes), numeric_cols), group_col)))
-      heatmap_data=data.frame(heatmap_data)
-      heatmap_data=heatmap_data[order(heatmap_data[,dim(heatmap_data)[2]]),]
+      heatmap_data <- data.frame(heatmap_data)
+      heatmap_data <- heatmap_data[order(heatmap_data[,dim(heatmap_data)[2]]),]
       
-      
+      # Color palette
       col <- colorRampPalette(rev(RColorBrewer::brewer.pal(n = 10, name = "RdYlBu")))(100)
       ByPal <- colorRampPalette(c('yellow','purple'))
-      # Create plot
-      heatmap_plot<-heatmaply(heatmap_data[,-dim(heatmap_data)[2]],column_text_angle=90,Rowv = F, Colv = F,colors =col ,scale = "column",
-                              row_side_colors=as.factor(heatmap_data[,dim(heatmap_data)[2]]),row_side_palette= ByPal,
-                              showticklabels = c(TRUE, FALSE))
+      
+      # Create optimized heatmap
+      heatmaply(
+        heatmap_data[,-dim(heatmap_data)[2]], 
+        column_text_angle = 90,
+        Rowv = FALSE, 
+        Colv = FALSE,
+        colors = col,
+        scale = "column",
+        row_side_colors = as.factor(heatmap_data[,dim(heatmap_data)[2]]),
+        row_side_palette = ByPal,
+        showticklabels = c(TRUE, FALSE), 
+        plot_method = "plotly",
+        margins = c(50, 50, 40, 0), 
+        legend_side = "top",         
+        row_side_colors_legend_side = "top"
+      )
     })
     
     
@@ -2486,6 +2521,6 @@ shinyApp(ui, server)
 
 }
 
-APIomics()
+APIomics2()
 
 
