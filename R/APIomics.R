@@ -647,9 +647,7 @@ APIomics<-function()
   server <- function(input, output, session) {
     # Reactive values to store data across tabs
     
-    
-    
-    rv <- reactiveValues(
+      rv <- reactiveValues(
       raw_data = NULL,
       preprocessed_data = NULL,
       Normalized_data=NULL,
@@ -808,10 +806,12 @@ APIomics<-function()
             rv$deg_data <- rv$Normalized_data
             shinyalert("Note", "Select limma-voom method for Preprocessed Data.")
             deg_alert_shown(TRUE)
-          } else if (input$data_type == "normalized" & input$normalized_data & !is.null(rv$raw_data)) {
+          } else if (input$normalized_data & !is.null(rv$raw_data)) {
             non_numeric_cols <- names(rv$raw_data)[!sapply(rv$raw_data, is.numeric)]
+            updateSelectInput(session, "data_type", choices = "Normalized Data")
             updateSelectInput(session, "comparison_group", choices = non_numeric_cols)
-            shinyalert("Note", "Normalized data provided in the Data Input tab. \nSelect limma method for Normalized Data.")
+            updateSelectInput(session, "deg_method", choices = "voom")
+           # shinyalert("Note", "Normalized data provided in the Data Input tab. \nSelect limma method for Normalized Data.")
             rv$deg_data <- rv$raw_data
             deg_alert_shown(TRUE)
           }
@@ -1090,7 +1090,7 @@ APIomics<-function()
       # Heatmap TIFF download handler
       output$download_deg_heatmap_tiff <- downloadHandler(
         filename = function() {
-          paste("heatmap_plot_", Sys.Date(), ".tiff", sep = "")
+          paste("heatmap_plot_DEG_", Sys.Date(), ".tiff", sep = "")
         },
         content = function(file) {
           # Store inputs locally to avoid reactive dependencies during rendering
@@ -1168,7 +1168,7 @@ APIomics<-function()
               show_rownames = FALSE,      
               annotation_row = ann_row,
               annotation_colors = ann_colors,
-              main = "Gene Expression Heatmap for Top 20 Genes",
+              main = "Gene Expression Heatmap for Top 20 DEG Genes",
               fontsize = 10,
               fontsize_col = 8,
               legend = TRUE,
@@ -1211,9 +1211,10 @@ APIomics<-function()
             non_numeric_cols <- names(rv$Normalized_data)[!sapply(rv$Normalized_data, is.numeric)]
             updateSelectInput(session, "comparison_group2", choices = non_numeric_cols)
             rv$reg_data <- rv$Normalized_data
-          } else if (input$data_type_reg == "normalized" & input$normalized_data & !is.null(rv$raw_data)) {
+          } else if (input$normalized_data & !is.null(rv$raw_data)) {
             non_numeric_cols <- names(rv$raw_data)[!sapply(rv$raw_data, is.numeric)]
             updateSelectInput(session, "comparison_group2", choices = non_numeric_cols)
+            updateSelectInput(session, "data_type_reg", choices = "Normalized Data")
             rv$reg_data <- rv$raw_data
           }
           
@@ -1526,72 +1527,177 @@ APIomics<-function()
         height <- input$heatmap_height
         res <- input$heatmap_res
         
-        # Create TIFF file
-        tiff(file, width = width, height = height, units = "in", res = res)
-        
-        # Prepare data
-        reg_data1 <- rv$reg_data[,-dim(rv$reg_data)[2]]
-        
-        module_genes_top <- rv$moduleMembership %>%
-          select(input$module_selection)
-        module_genes_top <- data.frame(Genes=rownames(module_genes_top), module_genes_top)
-        
-        module_genes_top2 <- module_genes_top[order(module_genes_top[,2], decreasing=TRUE),]
-        
-        topGenes <- module_genes_top2[,1][1:input$top_regulators]
-        
-        # Filter by selected group if not "All Groups"
-        if(input$selected_group != "All Groups") {
-          group_indices <- which(rv$group_data$Group == input$selected_group)
-          reg_data1 <- reg_data1[group_indices,]
-        }
-        
-        # Set up the gene expression data frame
-        mod_mat <- reg_data1 %>%
-          dplyr::select(all_of(topGenes)) %>%
-          as.matrix()
-        
-        group_data <- rv$reg_data[rownames(mod_mat), ncol(rv$reg_data), drop = FALSE]
-        
-        # Prepare final matrix with ordered groups
-        mod_mat <- data.frame(mod_mat, Group=group_data[,1])
-        mod_mat <- mod_mat[order(mod_mat$Group),]
-        
-        # Extract the matrix without the group column
-        plot_matrix <- as.matrix(mod_mat[, -ncol(mod_mat)])
-        
-        # Color schemes to match plotly display
-        col <- colorRampPalette(rev(RColorBrewer::brewer.pal(n = 10, name = "RdYlBu")))(100)
-        ByPal <- colorRampPalette(c('yellow', 'purple'))
-        
-        # Get unique groups for side colors
-        groups <- mod_mat$Group
-        unique_groups <- unique(groups)
-        group_colors <- ByPal(length(unique_groups))
-        names(group_colors) <- unique_groups
-        row_colors <- group_colors[groups]
-        
-        # Create the heatmap
-        par(oma=c(2,2,2,2))
-        heatmap.2(plot_matrix,
-                  main = paste("Top", input$top_regulators, "Genes,",
-                               "\nModule:", input$module_selection,
-                               if(input$selected_group != "All Groups") 
-                                 paste("\nGroup:", input$selected_group) else ""),
-                  col = col,
-                  scale = "column",  # Scale columns like in plotly
-                  trace = "none",
-                  density.info = "none",
-                  key = TRUE,
-                  keysize = 1,
-                  margins = c(10, 10),  # Adjust margins for labels
-                  dendrogram = "none",  # No dendrograms to match plotly
-                  Rowv = FALSE,         # No row clustering
-                  Colv = FALSE,         # No column clustering
-                  srtCol = 90,          # Rotate column labels
-                  cexRow = 0.8,         # Adjust row label size
-                  cexCol = 0.8)         # Adjust column label size
-        dev.off()
+        # Create progress indicator
+        withProgress(message = 'Creating module heatmap...', value = 0.1, {
+          # Capture all input values at the beginning to prevent reactivity issues
+          module_selection <- input$module_selection
+          top_regulators <- input$top_regulators
+          selected_group <- input$selected_group
+          
+          # Add error checking
+          tryCatch({
+            setProgress(value = 0.2, message = "Preparing module data...")
+            
+            # Check if required data exists
+            if(is.null(rv$reg_data) || is.null(rv$moduleMembership)) {
+              showNotification("Required data is missing. Make sure the analysis has been completed.", type = "error")
+              return(NULL)
+            }
+            
+            # Prepare data - explicitly handle column selection
+            # Extract all columns except the last one
+            reg_data1 <- rv$reg_data[, 1:(ncol(rv$reg_data)-1), drop = FALSE]
+            
+            setProgress(value = 0.3, message = "Selecting top genes...")
+            
+            # Get top genes for selected module - fix the tidyselect warning
+            module_genes_top <- rv$moduleMembership %>%
+              dplyr::select(all_of(module_selection))  # Using all_of() as recommended
+            
+            # Create a data frame with gene names
+            module_genes_top <- data.frame(
+              Genes = rownames(module_genes_top), 
+              Score = module_genes_top[[1]], 
+              stringsAsFactors = FALSE
+            )
+            
+            # Sort genes by membership score
+            module_genes_top2 <- module_genes_top[order(module_genes_top$Score, decreasing = TRUE), ]
+            
+            # Check if we have enough genes
+            if(nrow(module_genes_top2) < top_regulators) {
+              top_regulators <- nrow(module_genes_top2)
+              showNotification(paste("Only", top_regulators, "genes available for this module."), type = "warning")
+            }
+            
+            # Get top N genes
+            topGenes <- module_genes_top2$Genes[1:top_regulators]
+            
+            setProgress(value = 0.4, message = "Filtering data...")
+            
+            # Filter by selected group if not "All Groups"
+            filtered_reg_data <- reg_data1
+            if(selected_group != "All Groups") {
+              # Make sure group_data exists and has a Group column
+              if(is.null(rv$group_data) || !"Group" %in% colnames(rv$group_data)) {
+                showNotification("Group data is missing or invalid.", type = "error")
+                return(NULL)
+              }
+              group_indices <- which(rv$group_data$Group == selected_group)
+              if(length(group_indices) == 0) {
+                showNotification("No samples found for the selected group.", type = "error")
+                return(NULL)
+              }
+              filtered_reg_data <- reg_data1[group_indices, , drop = FALSE]
+            }
+            
+            setProgress(value = 0.5, message = "Creating matrix...")
+            
+            # Check if all topGenes exist in the data
+            missing_genes <- setdiff(topGenes, colnames(filtered_reg_data))
+            if(length(missing_genes) > 0) {
+              topGenes <- intersect(topGenes, colnames(filtered_reg_data))
+              showNotification(paste("Some genes were not found in the data:", 
+                                     paste(missing_genes, collapse = ", ")), type = "warning")
+              if(length(topGenes) == 0) {
+                showNotification("No genes from the module found in the data.", type = "error")
+                return(NULL)
+              }
+            }
+            
+            # Set up the gene expression data frame
+            mod_mat <- filtered_reg_data %>%
+              dplyr::select(all_of(topGenes)) %>%  # Using all_of() as recommended
+              as.matrix()
+            
+            if(nrow(mod_mat) == 0) {
+              showNotification("No samples available for the selected criteria.", type = "error")
+              return(NULL)
+            }
+            
+            setProgress(value = 0.6, message = "Getting group information...")
+            
+            # Get group information - directly use the last column of rv$reg_data
+            group_col <- ncol(rv$reg_data)
+            group_data <- rv$reg_data[rownames(mod_mat), group_col, drop = FALSE]
+            
+            # Get the groups and prepare annotations
+            groups <- as.character(group_data[,1])  # Convert to character to ensure compatibility
+            ann_row <- data.frame(Group = groups, stringsAsFactors = FALSE)
+            rownames(ann_row) <- rownames(mod_mat)
+            
+            # Sort the data by group
+            sorted_indices <- order(ann_row$Group)
+            sorted_matrix <- mod_mat[sorted_indices, , drop = FALSE]
+            sorted_ann_row <- ann_row[sorted_indices, , drop = FALSE]
+            
+            setProgress(value = 0.7, message = "Preparing colors...")
+            
+            # Color schemes - use a fixed set of colors to avoid issues with dynamic palettes
+            unique_groups <- unique(sorted_ann_row$Group)
+            
+            # Use a pre-defined color set if there are many groups
+            if(length(unique_groups) <= 8) {
+              group_colors <- RColorBrewer::brewer.pal(max(3, length(unique_groups)), "Set1")[1:length(unique_groups)]
+            } else {
+              # Fall back to a standard palette for larger sets
+              group_colors <- rainbow(length(unique_groups))
+            }
+            
+            names(group_colors) <- unique_groups
+            ann_colors <- list(Group = group_colors)
+            
+            # Create the title
+            main_title <- paste("Top", top_regulators, "Genes,",
+                                "Module:", module_selection,
+                                if(selected_group != "All Groups") paste("Group:", selected_group) else "")
+            
+            setProgress(value = 0.8, message = "Generating heatmap...")
+            
+            # Explicitly check for NAs and replace them
+            if(any(is.na(sorted_matrix))) {
+              showNotification("Data contains missing values. They will be replaced with zeros.", type = "warning")
+              sorted_matrix[is.na(sorted_matrix)] <- 0
+            }
+            
+            # heatmap
+            tiff(file, width = width, height = height, units = "in", res = res)
+            pheatmap::pheatmap(
+              sorted_matrix,
+              scale = "column",
+              color = colorRampPalette(rev(RColorBrewer::brewer.pal(n = 9, name = "RdYlBu")))(100),
+              cluster_rows = FALSE,
+              cluster_cols = FALSE,
+              show_rownames = FALSE,    
+              annotation_row = sorted_ann_row,
+              annotation_colors = ann_colors,
+              main = main_title,
+              fontsize = 10,
+              fontsize_col = 8,
+              angle_col = 90,            
+              legend = TRUE,
+              annotation_legend = TRUE
+            )
+            dev.off()
+            
+            setProgress(value = 1, message = "Completed!")
+            
+          }, error = function(e) {
+            # Detailed error message
+            error_msg <- paste("Error generating heatmap:", e$message)
+            showNotification(error_msg, type = "error", duration = 10)
+            
+            # Create a simple error plot as a fallback
+            tiff(file, width = width, height = height, units = "in", res = res)
+            plot(1, type = "n", axes = FALSE, xlab = "", ylab = "")
+            text(1, 1, paste("Error generating heatmap:\n", e$message), cex = 1.2)
+            dev.off()
+            
+            # Print detailed error to console for debugging
+            cat("Error in download_module_heatmap:", e$message, "\n")
+            cat("Call stack:", e$call, "\n")
+          })
+        })
       }
     )
     
@@ -1698,9 +1804,24 @@ APIomics<-function()
               pvalueCutoff = input$GSEA_pvalue_threshold
             )
           } else if (input$enrichment_type == "kegg") {
-            names(gene_list) <- bitr(names(gene_list), fromType = "SYMBOL", toType = "ENTREZID", OrgDb = "org.Hs.eg.db")$ENTREZID
+            # Fix: Properly convert SYMBOL to ENTREZID and create a new gene list
+            id_mapping <- bitr(names(gene_list), fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Hs.eg.db)
+            
+            # Remove any genes that couldn't be mapped
+            mapped_genes <- gene_list[names(gene_list) %in% id_mapping$SYMBOL]
+            
+            # Create a new named vector with ENTREZID as names
+            mapped_ids <- id_mapping$ENTREZID
+            names(mapped_ids) <- id_mapping$SYMBOL
+            
+            entrez_gene_list <- mapped_genes
+            names(entrez_gene_list) <- mapped_ids[names(mapped_genes)]
+            
+            # Sort again in case any genes were removed
+            entrez_gene_list <- sort(entrez_gene_list, decreasing = TRUE)
+            
             enrichment_results <- gseKEGG(
-              geneList = gene_list,
+              geneList = entrez_gene_list,
               organism = "hsa",
               pvalueCutoff = input$GSEA_pvalue_threshold
             )
@@ -1723,20 +1844,19 @@ APIomics<-function()
       
       output$enrichment_table <- renderDT({
         req(rv$enrichment_results)
-        datatable(as.data.frame(rv$enrichment_results), options = list(scrollX = TRUE,pageLength = 3))
+        datatable(as.data.frame(rv$enrichment_results), options = list(scrollX = TRUE, pageLength = 3))
       })
       
       output$enrichment_network <- renderPlot({
         req(rv$enrichment_results)
-        goplot(rv$enrichment_results, showCategory  = input$top_enriched, title = "Enrichment Netwrok")
+        goplot(rv$enrichment_results, showCategory = input$top_enriched, title = "Enrichment Network")
       })
       
       output$enrichment_plot <- renderPlot({
         req(rv$enrichment_results)
-        dotplot(rv$enrichment_results, showCategory = input$top_enriched)+
-          theme(axis.text.x=element_text(size=15),axis.text.y=element_text(size=15))
+        dotplot(rv$enrichment_results, showCategory = input$top_enriched) +
+          theme(axis.text.x = element_text(size = 15), axis.text.y = element_text(size = 15))
       })
-      
     })
     
     # Download Handlers
@@ -1798,8 +1918,9 @@ APIomics<-function()
             updateSelectInput(session, "mra_group", choices = unique(rv$group_data$Group))
             rv$mra_data <- rv$Normalized_data
             
-          } else if (input$data_type_mra == "normalized" & input$normalized_data & !is.null(rv$raw_data)) {
+          } else if (input$normalized_data & !is.null(rv$raw_data)) {
             updateSelectInput(session, "mra_group", choices = unique(rv$group_data$Group))
+            updateSelectInput(session, "data_type_mra", choices = "Normalized Data")
             rv$mra_data <- rv$raw_data
             
           }
