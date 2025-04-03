@@ -1664,7 +1664,7 @@ APIomics<-function()
             tiff(file, width = width, height = height, units = "in", res = res)
             pheatmap::pheatmap(
               sorted_matrix,
-              scale = "column",
+              #scale = "column",
               color = colorRampPalette(rev(RColorBrewer::brewer.pal(n = 9, name = "RdYlBu")))(100),
               cluster_rows = FALSE,
               cluster_cols = FALSE,
@@ -1764,7 +1764,6 @@ APIomics<-function()
     
     
     
-    
     # Gene Set Enrichment Tab
     observeEvent(input$run_enrichment, {
       req(rv$deg_results)
@@ -1777,6 +1776,9 @@ APIomics<-function()
       # Run enrichment analysis based on user selection
       withProgress(message = "Running Enrichment Analysis", value = 0, {
         enrichment_results <- NULL
+        enrichment_type <- input$enrichment_type  # Store the type for later use
+        id_mapping <- NULL  # Initialize mapping variable
+        
         tryCatch({
           incProgress(0.3, detail = "Running GSEA")
           if (input$enrichment_type == "gobp") {
@@ -1827,10 +1829,9 @@ APIomics<-function()
             )
           }
         }, error = function(e) {
-          shinyalert("Error", "Enrichment analysis failed. Check your input or database selection.")
+          shinyalert("Error", paste("Enrichment analysis failed:", e$message), type = "error")
         })
         incProgress(1, detail = "Complete")
-        
         
         # Check if results are empty
         if (is.null(enrichment_results) || nrow(as.data.frame(enrichment_results)) == 0) {
@@ -1838,26 +1839,92 @@ APIomics<-function()
           return(NULL)
         }
         
-        # Save results and render outputs
+        # Save results and type for rendering outputs
         rv$enrichment_results <- enrichment_results
+        rv$enrichment_type <- enrichment_type
+        rv$id_mapping <- id_mapping  # Save the ID mapping for later use
+        
+        # Also save the original gene list for plots
+        rv$original_gene_list <- gene_list
       })
       
       output$enrichment_table <- renderDT({
         req(rv$enrichment_results)
-        datatable(as.data.frame(rv$enrichment_results), options = list(scrollX = TRUE, pageLength = 3))
+        
+        # Get the results as a data frame
+        results_df <- as.data.frame(rv$enrichment_results)
+        
+        # For KEGG results, convert gene IDs in the 'core_enrichment' column back to gene symbols
+        if (rv$enrichment_type == "kegg" && !is.null(rv$id_mapping)) {
+          # Create a lookup dictionary for ENTREZID to SYMBOL conversion
+          id_to_symbol <- setNames(rv$id_mapping$SYMBOL, rv$id_mapping$ENTREZID)
+          
+          # Function to convert IDs to symbols in the core_enrichment column
+          convert_ids <- function(id_string) {
+            ids <- strsplit(id_string, "/")[[1]]
+            symbols <- sapply(ids, function(id) {
+              if (id %in% names(id_to_symbol)) {
+                return(id_to_symbol[id])
+              } else {
+                return(id)  # Keep original if no mapping found
+              }
+            })
+            paste(symbols, collapse = "/")
+          }
+          
+          # Apply the conversion function to the core_enrichment column
+          results_df$core_enrichment <- sapply(results_df$core_enrichment, convert_ids)
+        }
+        
+        datatable(results_df, options = list(scrollX = TRUE, pageLength = 3))
       })
       
       output$enrichment_network <- renderPlot({
         req(rv$enrichment_results)
-        goplot(rv$enrichment_results, showCategory = input$top_enriched, title = "Enrichment Network")
+        
+        # Use different network visualization based on enrichment type
+        if (rv$enrichment_type %in% c("gobp", "gomf", "gocc")) {
+          # For GO analysis, use goplot
+          goplot(rv$enrichment_results, showCategory = input$top_enriched, title = "GO Enrichment Network")
+        } else if (rv$enrichment_type == "kegg") {
+          # For KEGG analysis, convert gene IDs back to symbols for visualization
+          tryCatch({
+            # Convert KEGG results to readable format with gene symbols
+            enrichment_readable <- setReadable(rv$enrichment_results, OrgDb = org.Hs.eg.db, keyType = "ENTREZID")
+            
+            # Use cnetplot with gene symbols and original fold changes
+            cnetplot(enrichment_readable, 
+                     categorySize = "pvalue", 
+                     showCategory = min(input$top_enriched, nrow(rv$enrichment_results@result)),
+                     foldChange = rv$original_gene_list,
+                     title = "KEGG Pathway Network") + 
+              ggplot2::theme(legend.text = element_text(size = 8))
+          }, error = function(e) {
+            # If cnetplot fails, try using emapplot
+            enrichment_readable <- setReadable(rv$enrichment_results, OrgDb = org.Hs.eg.db, keyType = "ENTREZID")
+            
+            emapplot(enrichment_readable, 
+                     showCategory = min(input$top_enriched, nrow(rv$enrichment_results@result)),
+                     title = "KEGG Pathway Network")
+          })
+        }
       })
       
       output$enrichment_plot <- renderPlot({
         req(rv$enrichment_results)
-        dotplot(rv$enrichment_results, showCategory = input$top_enriched) +
-          theme(axis.text.x = element_text(size = 15), axis.text.y = element_text(size = 15))
+        
+        # For KEGG results, convert to readable gene symbols for the dotplot
+        if (rv$enrichment_type == "kegg") {
+          enrichment_readable <- setReadable(rv$enrichment_results, OrgDb = org.Hs.eg.db, keyType = "ENTREZID")
+          dotplot(enrichment_readable, showCategory = input$top_enriched) +
+            theme(axis.text.x = element_text(size = 15), axis.text.y = element_text(size = 15))
+        } else {
+          dotplot(rv$enrichment_results, showCategory = input$top_enriched) +
+            theme(axis.text.x = element_text(size = 15), axis.text.y = element_text(size = 15))
+        }
       })
     })
+    
     
     # Download Handlers
     output$download_enrichment_results <- downloadHandler(
@@ -1879,8 +1946,17 @@ APIomics<-function()
         height <- input$enrichment_plot_height
         res <- input$enrichment_plot_res
         tiff(file, width = width, height = height, units = "in", res = res)
-        P1<-dotplot(rv$enrichment_results, showCategory = input$top_enriched) +
-          theme(axis.text.x = element_text(size = 15), axis.text.y = element_text(size = 15))
+        
+        # Check if KEGG and convert if needed
+        if (rv$enrichment_type == "kegg") {
+          enrichment_readable <- setReadable(rv$enrichment_results, OrgDb = org.Hs.eg.db, keyType = "ENTREZID")
+          P1 <- dotplot(enrichment_readable, showCategory = input$top_enriched) +
+            theme(axis.text.x = element_text(size = 15), axis.text.y = element_text(size = 15))
+        } else {
+          P1 <- dotplot(rv$enrichment_results, showCategory = input$top_enriched) +
+            theme(axis.text.x = element_text(size = 15), axis.text.y = element_text(size = 15))
+        }
+        
         print(P1)
         dev.off()
       }
@@ -1895,12 +1971,32 @@ APIomics<-function()
         height <- input$network_height
         res <- input$network_res
         tiff(file, width = width, height = height, units = "in", res = res)
-        P2<-goplot(rv$enrichment_results, showCategory = input$top_enriched, title = "Enrichment Netwrok")
+        
+        # Generate appropriate network plot based on enrichment type
+        if (rv$enrichment_type %in% c("gobp", "gomf", "gocc")) {
+          P2 <- goplot(rv$enrichment_results, showCategory = input$top_enriched, title = "GO Enrichment Network")
+        } else if (rv$enrichment_type == "kegg") {
+          # For KEGG, we need to convert to readable format first
+          enrichment_readable <- setReadable(rv$enrichment_results, OrgDb = org.Hs.eg.db, keyType = "ENTREZID")
+          
+          tryCatch({
+            P2 <- cnetplot(enrichment_readable, 
+                           categorySize = "pvalue", 
+                           showCategory = min(input$top_enriched, nrow(rv$enrichment_results@result)),
+                           foldChange = rv$original_gene_list,
+                           title = "KEGG Pathway Network") + 
+              ggplot2::theme(legend.text = element_text(size = 8))
+          }, error = function(e) {
+            P2 <- emapplot(enrichment_readable, 
+                           showCategory = min(input$top_enriched, nrow(rv$enrichment_results@result)),
+                           title = "KEGG Pathway Network")
+          })
+        }
+        
         print(P2)
         dev.off()
       }
-    )  
-    
+    )
     
     
     
