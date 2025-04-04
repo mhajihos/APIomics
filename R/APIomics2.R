@@ -3028,6 +3028,7 @@ allowWGCNAThreads()
             print(current_importance_plot())
             dev.off()
           }
+        )
         
         output$download_model_perf <- downloadHandler(
           filename = function() {
