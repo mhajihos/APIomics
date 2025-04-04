@@ -530,7 +530,7 @@ allowWGCNAThreads()
                                   choices = c("LASSO Regression", "Random Forest", "XGBoost")),
                       numericInput("featur_top_n", "Number of Top Features", value = 10, min = 5, max = 100, step = 1),
                       actionButton("run_analysis", "Run Analysis"),
-                      downloadButton("download_combined_features", "Download All Top Features (Run all models)")
+                      downloadButton("download_combined_features", "Download All Top Sorted Features (Run all models)")
                   )
                 ),
                 fluidRow(
@@ -2208,6 +2208,7 @@ allowWGCNAThreads()
     })
     
     all_model_features <- reactiveValues(rf = NULL, lasso = NULL, xgb = NULL)
+    all_model_important_scores <- reactiveValues(rf = NULL, lasso = NULL, xgb = NULL)
     current_importance_plot <- reactiveVal(NULL)
     imp_result <- reactiveVal(NULL)
     
@@ -2348,9 +2349,19 @@ allowWGCNAThreads()
           top_features <- imp_df[order(-imp_df[, 1]), ][1:min(top_n, nrow(imp_df)), ]
           features<-imp_df[order(-imp_df[, 1]), ]
           
-          if (model_type == "Random Forest") all_model_features$rf <- features$Feature
-          if (model_type == "LASSO Regression") all_model_features$lasso <- features$Feature
-          if (model_type == "XGBoost") all_model_features$xgb <- features$Feature
+          if (model_type == "Random Forest") {
+            all_model_features$rf <- features$Feature
+            all_model_important_scores$rf <- features
+          }
+          if (model_type == "LASSO Regression") {
+            all_model_features$lasso <- features$Feature
+            all_model_important_scores$lasso <- features
+          }
+          if (model_type == "XGBoost") {
+            all_model_features$xgb <- features$Feature
+            all_model_important_scores$xgb <- features
+          }
+          
           
           p <- ggplot(top_features, aes(x = reorder(Feature, !!sym(names(top_features)[1])), y = !!sym(names(top_features)[1]))) +
             geom_col(fill = "steelblue") +
@@ -2394,18 +2405,37 @@ allowWGCNAThreads()
         output$download_combined_features <- downloadHandler(
           filename = function() paste("combined_model_top_features_", Sys.Date(), ".csv", sep = ""),
           content = function(file) {
-            max_len <- max(length(all_model_features$rf), length(all_model_features$lasso), length(all_model_features$xgb))
-            df <- data.frame(
-              Random_Forest = head(all_model_features$rf, max_len),
-              LASSO = head(all_model_features$lasso, max_len),
-              XGBoost = head(all_model_features$xgb, max_len),
-              stringsAsFactors = FALSE
+            rf_sorted <- all_model_important_scores$rf[order(-all_model_important_scores$rf[, 1]), "Feature"]
+            lasso_sorted <- all_model_important_scores$lasso[order(-all_model_important_scores$lasso[, 1]), "Feature"]
+            xgb_sorted <- all_model_important_scores$xgb[order(-all_model_important_scores$xgb[, 1]), "Feature"]
+            
+            # Create a named list of sorted features
+            feature_lists <- list(
+              Random_Forest = rf_sorted,
+              LASSO = lasso_sorted,
+              XGBoost = xgb_sorted
             )
-            df$Common <- Reduce(intersect, list(all_model_features$rf, all_model_features$lasso, all_model_features$xgb))
-            rv$common_genes <- df$Common
-            write.csv(df, file, row.names = FALSE)
+            
+            # Determine the max length for proper binding
+            max_len <- max(sapply(feature_lists, length))
+            
+            # Convert to a data.frame with ragged columns (shorter columns just leave blanks)
+            feature_df <- as.data.frame(lapply(feature_lists, function(x) {
+              length(x) <- max_len
+              return(x)
+            }), stringsAsFactors = FALSE)
+            
+            # Add common features (intersection, sorted alphabetically for clarity)
+            feature_df$Common <- sort(Reduce(intersect, feature_lists))
+            rv$common_genes <- feature_df$Common
+            
+            # Write to file (blanks instead of NA)
+            write.table(feature_df, file, sep = ",", row.names = FALSE, col.names = TRUE, quote = TRUE, na = "")
           }
         )
+        
+        
+        
 
         if (input$ml_model == "XGBoost") {
           explainer <- shap.prep(xgb_model = model_fit$finalModel, X_train = model.matrix(Group ~ . - 1, train_data))
