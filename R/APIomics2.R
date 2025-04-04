@@ -297,10 +297,10 @@ allowWGCNAThreads()
         menuItem("Gene Set Enrichment", tabName = "geneset_enrichment", icon = icon("microscope")),
         menuItem("Gene Regulators", tabName = "gene_regulators", icon = icon("dna")),
         menuItem("Master Regulators", tabName = "master_regulators", icon = icon("crown")),
+        menuItem("AI-Based Discovery", tabName = "AI_discovery", icon = icon("robot")),
         menuItem("Literature Search", tabName = "pubmed_search", icon = icon("search")),
         menuItem("Gene Disease Network", tabName = "gene_disease_network", icon = icon("network-wired")),
-        menuItem("Drug Database Search", tabName = "database_search", icon = icon("pills")),
-        menuItem("AI-Based Discovery", tabName = "AI_discovery", icon = icon("robot"))
+        menuItem("Drug Database Search", tabName = "database_search", icon = icon("pills"))
       )
     ),
     dashboardBody(
@@ -521,73 +521,6 @@ allowWGCNAThreads()
                 )
         ),
         
-        #Pubmed and CT
-        tabItem(tabName = "pubmed_search",
-                fluidRow(
-                  box(title = "Search Options", status = "primary", solidHeader = TRUE,
-                      radioButtons("search_source", "Select Source of Terms:",
-                                   choices = list("DEG Analysis (Top 20 Genes)" = "deg_analysis",
-                                                  "Master Regulators" = "master_regulators",
-                                                  "Gene Regulators (Top 20 Module-Genes)" = "gene_regulators")),
-                      uiOutput("module_selection"),
-                      textInput("disease_filter", "Specify Disease:", value = "Specify a disease"),
-                      selectInput("search_field", "Search in:", 
-                                  choices = c("Title/Abstract" = "[Title/Abstract]", 
-                                              "MeSH Terms" = "[MeSH Terms]"), 
-                                  selected = "[Title/Abstract]"),
-                      radioButtons("module_selection2", "Select Module", choices = c("Only for Gene Regulators")),
-                      checkboxInput("clinical_trial_only", "Limit PubMed Search to Clinical Trials", FALSE),
-                      actionButton("search", "Search in Pubmed & Clinical Trials"),
-                      downloadButton("download_results", "Download Pubmed Results as CSV"),
-                      downloadButton("download_results1", "Download Clinical Trials Results as CSV"),
-                      verbatimTextOutput("debug_info")
-                  )
-                ),
-                fluidRow(
-                  tabBox(id = "results_tabs", width = 12, 
-                         tabPanel("PubMed Results", DTOutput("pubmed_table")),
-                         tabPanel("Clinical Trials Results", DTOutput("clinical_trials_table"))
-                  )
-                )
-        ),
-        
-        
-        #Gene Disease Network Tab
-        tabItem(tabName = "gene_disease_network",
-                fluidRow(
-                  box(title = "Gene Disease Network Analysis", status = "primary", solidHeader = TRUE, width = 12,
-                      selectInput("gene_source", "Select Source of Genes:",
-                                  choices = c("DEG Analysis" = "deg",
-                                              "Master Regulators" = "mra",
-                                              "Gene Regulators (WGCNA)" = "wgcna")),
-                      numericInput("qvalue_threshold_DEGEN", "q-value Threshold for the Results", 
-                                   value = 0.05, min = 0, max = 1),
-                      uiOutput("module_selection"),
-                      radioButtons("module_selection3", "Select Module", choices = c("Only for Gene Regulators")),
-                      sliderInput("centrality_filter", "Filter Nodes by Centrality:", min = 0, max = 1, value = 0.5, step = 0.05),
-                      sliderInput("top_n_results", "Top N Diseases for Network:", min = 1, max = 50, value = 10, step = 1),
-                      actionButton("run_disease_network", "Run Analysis")
-                  )
-                ),
-                fluidRow(
-                  column(width = 6,
-                         box(title = "Disease Enrichment Results", status = "info", solidHeader = TRUE, width = 12,
-                             DTOutput("disease_enrichment_table"),
-                             downloadButton("download_disease_results", "Download Results")
-                         )
-                  ),
-                  column(width = 6,
-                         box(title = "Disease-Gene Network", status = "success", solidHeader = TRUE, width = 12,
-                             visNetworkOutput("disease_network_plot", height = "600px"),
-                             sliderInput("dn_plot_width", "Width (inches)", min = 4, max = 20, value = 8, width='400px'),
-                             sliderInput("dn_plot_height", "Height (inches)", min = 4, max = 20, value = 8, width='400px'),
-                             numericInput("dn_plot_res", "Resolution (dpi)", value = 300, min = 100),
-                             downloadButton("download_disease_network", "Download Network (TIFF)")
-                         )
-                  )
-                )
-        ),
-        
         tabItem(tabName = "AI_discovery",
                 fluidRow(
                   box(title = "AI Biomarker Discovery [Time Consuming]", status = "primary", solidHeader = TRUE,
@@ -631,6 +564,75 @@ allowWGCNAThreads()
                            box(title = "SHAP Summary Plot", status = "success", solidHeader = TRUE, width = 12,
                                plotOutput("shap_plot", height = "500px")
                            )
+                         )
+                  )
+                )
+        ),
+        
+        #Pubmed and CT
+        tabItem(tabName = "pubmed_search",
+                fluidRow(
+                  box(title = "Search Options", status = "primary", solidHeader = TRUE,
+                      radioButtons("search_source", "Select Source of Terms:",
+                                   choices = list("DEG Analysis (Top 20 Genes)" = "deg_analysis",
+                                                  "Master Regulators" = "master_regulators",
+                                                  "Gene Regulators (Top 20 Module-Genes)" = "gene_regulators",
+                                                  "AI Common Feature Genes"="ai_genes")),
+                      uiOutput("module_selection"),
+                      textInput("disease_filter", "Specify Disease:", value = "Specify a disease"),
+                      selectInput("search_field", "Search in:", 
+                                  choices = c("Title/Abstract" = "[Title/Abstract]", 
+                                              "MeSH Terms" = "[MeSH Terms]"), 
+                                  selected = "[Title/Abstract]"),
+                      radioButtons("module_selection2", "Select Module", choices = c("Only for Gene Regulators")),
+                      checkboxInput("clinical_trial_only", "Limit PubMed Search to Clinical Trials", FALSE),
+                      actionButton("search", "Search in Pubmed & Clinical Trials"),
+                      downloadButton("download_results", "Download Pubmed Results as CSV"),
+                      downloadButton("download_results1", "Download Clinical Trials Results as CSV"),
+                      verbatimTextOutput("debug_info")
+                  )
+                ),
+                fluidRow(
+                  tabBox(id = "results_tabs", width = 12, 
+                         tabPanel("PubMed Results", DTOutput("pubmed_table")),
+                         tabPanel("Clinical Trials Results", DTOutput("clinical_trials_table"))
+                  )
+                )
+        ),
+        
+        
+        #Gene Disease Network Tab
+        tabItem(tabName = "gene_disease_network",
+                fluidRow(
+                  box(title = "Gene Disease Network Analysis", status = "primary", solidHeader = TRUE, width = 12,
+                      selectInput("gene_source", "Select Source of Genes:",
+                                  choices = c("DEG Analysis" = "deg",
+                                              "Master Regulators" = "mra",
+                                              "Gene Regulators (WGCNA)" = "wgcna",
+                                              "AI Common Feature Genes"="ai_genes")),
+                      numericInput("qvalue_threshold_DEGEN", "q-value Threshold for the Results", 
+                                   value = 0.05, min = 0, max = 1),
+                      uiOutput("module_selection"),
+                      radioButtons("module_selection3", "Select Module", choices = c("Only for Gene Regulators")),
+                      sliderInput("centrality_filter", "Filter Nodes by Centrality:", min = 0, max = 1, value = 0.5, step = 0.05),
+                      sliderInput("top_n_results", "Top N Diseases for Network:", min = 1, max = 50, value = 10, step = 1),
+                      actionButton("run_disease_network", "Run Analysis")
+                  )
+                ),
+                fluidRow(
+                  column(width = 6,
+                         box(title = "Disease Enrichment Results", status = "info", solidHeader = TRUE, width = 12,
+                             DTOutput("disease_enrichment_table"),
+                             downloadButton("download_disease_results", "Download Results")
+                         )
+                  ),
+                  column(width = 6,
+                         box(title = "Disease-Gene Network", status = "success", solidHeader = TRUE, width = 12,
+                             visNetworkOutput("disease_network_plot", height = "600px"),
+                             sliderInput("dn_plot_width", "Width (inches)", min = 4, max = 20, value = 8, width='400px'),
+                             sliderInput("dn_plot_height", "Height (inches)", min = 4, max = 20, value = 8, width='400px'),
+                             numericInput("dn_plot_res", "Resolution (dpi)", value = 300, min = 100),
+                             downloadButton("download_disease_network", "Download Network (TIFF)")
                          )
                   )
                 )
@@ -681,7 +683,8 @@ allowWGCNAThreads()
                       selectInput("gene_source_db", "Select Gene List:", 
                                   choices = list("DEG Analysis (Top 20 Genes)" = "deg_analysis",
                                                  "Master Regulators" = "master_regulators",
-                                                 "Gene Regulators (Top 20 Module-Genes)" = "gene_regulators")),
+                                                 "Gene Regulators (Top 20 Module-Genes)" = "gene_regulators",
+                                                 "AI Common Feature Genes"="ai_genes")),
                       radioButtons("module_selection_db", "Select Module", choices = c("Only for Gene Regulators")),
                       actionButton("search_database", "Search"))
                   
@@ -727,7 +730,8 @@ allowWGCNAThreads()
       mra_data=NULL,
       mra_results=NULL,
       all_results=NULL,
-      ai_data=NULL
+      ai_data=NULL,
+      common_genes=NULL
     )
     
     # Initialize shinyjs and disable tabs except "Data Input"
@@ -1282,8 +1286,6 @@ allowWGCNAThreads()
         })
       }
     })
-    
-    
     
     
     # Gene Regulators Tab
@@ -2087,7 +2089,7 @@ allowWGCNAThreads()
     })
     
     
-    # Update the observeEvent section for MRA
+    # observeEvent section for MRA
     observeEvent(input$run_mra, {
       req(rv$deg_results)
       req(rv$mra_data)
@@ -2193,12 +2195,247 @@ allowWGCNAThreads()
     
     
     
+    #AI Feature Selection
+    cl <- makePSOCKcluster(parallel::detectCores() - 1)
+    registerDoParallel(cl)
+    
+    observeEvent(input$ml_model, {
+      output$model_summary <- renderText({ "" })
+      output$model_performance <- renderText({ "" })
+      output$feature_importance <- renderPlot({ NULL })
+      output$shap_plot <- renderPlot({ NULL })  
+      
+    })
+    
+    all_model_features <- reactiveValues(rf = NULL, lasso = NULL, xgb = NULL)
+    current_importance_plot <- reactiveVal(NULL)
+    imp_result <- reactiveVal(NULL)
+    
+    output$enable_combined_download <- reactive({
+      !is.null(all_model_features$rf) &&
+        !is.null(all_model_features$lasso) &&
+        !is.null(all_model_features$xgb)
+    })
+    outputOptions(output, "enable_combined_download", suspendWhenHidden = FALSE)
+    
+    observe({
+      if (!is.null(all_model_features$rf) &&
+          !is.null(all_model_features$lasso) &&
+          !is.null(all_model_features$xgb)) {
+        shinyjs::enable("download_combined_features")
+      } else {
+        shinyjs::disable("download_combined_features")
+      }
+    })
+    
+    
+    observe({
+      req(input$ai_data_type)
+      if (input$sidebar == "AI_discovery") {
+        isolate({
+          
+          if (input$ai_data_type == "raw" & !is.null(rv$raw_data) & !input$normalized_data) {
+            non_numeric_cols <- names(rv$raw_data)[!sapply(rv$raw_data, is.numeric)]
+            rv$ai_data <- rv$raw_data
+          } else if (input$ai_data_type == "processed" & !is.null(rv$Normalized_data) & !input$normalized_data) {
+            non_numeric_cols <- names(rv$Normalized_data)[!sapply(rv$Normalized_data, is.numeric)]
+            rv$ai_data <- rv$Normalized_data
+          } else if (input$normalized_data & !is.null(rv$raw_data)) {
+            non_numeric_cols <- names(rv$raw_data)[!sapply(rv$raw_data, is.numeric)]
+            updateSelectInput(session, "ai_data_type", choices = "Normalized Data")
+            rv$ai_data <- rv$raw_data
+          }
+          
+        })
+      }
+    })
+    
+    
+    observeEvent(input$run_analysis, {
+      req(rv$ai_data, rv$raw_data)
+      rv$model <- NULL
+      rv$importance <- NULL
+      rv$shap_values <- NULL
+      rv$shap_summary <- NULL
+      
+      output$model_summary <- renderPrint({ NULL })
+      output$feature_importance <- renderPlot({ NULL }, height = 600)
+      output$model_performance <- renderPrint({ NULL })
+      output$shap_plot <- renderPlot({
+        req(input$ml_model == "XGBoost", rv$shap_summary)
+        top_n <- input$featur_top_n
+        shap_df <- head(rv$shap_summary[order(rv$shap_summary$MeanSHAP, decreasing = TRUE), ], top_n)
+        ggplot(shap_df, aes(x = reorder(Feature, MeanSHAP), y = MeanSHAP)) +
+          geom_bar(stat = "identity", fill = "steelblue") +
+          coord_flip() +
+          theme_minimal(base_size = 14) +
+          labs(title = "Mean SHAP Values", y = "Mean SHAP", x = "Feature")
+      })
+      
+      
+      withProgress(message = 'Running ML Pipeline with 5-Fold CV', value = 0, {
+        incProgress(0.1, detail = "Preparing data...")
+        set.seed(123)
+        data <- rv$ai_data  
+        
+        # Drop unused factor levels before splitting
+        data$Group <- as.factor(data$Group)
+        data$Group <- droplevels(data$Group)
+        all_levels <- levels(data$Group)
+        
+        
+        incProgress(0.2, detail = "Data Split...")
+        
+        # Split into train (70%), validation (10%), test (20%)
+        train_idx <- createDataPartition(data$Group, p = 0.7, list = FALSE)
+        train_data <- data[train_idx, ]
+        temp_data <- data[-train_idx, ]
+        
+        val_idx <- createDataPartition(temp_data$Group, p = 0.333, list = FALSE)  # ~10% of total
+        val_data <- temp_data[val_idx, ]
+        test_data <- temp_data[-val_idx, ]
+        
+        # Re-factor with consistent levels
+        train_data$Group <- factor(train_data$Group, levels = all_levels)
+        val_data$Group <- factor(val_data$Group, levels = all_levels)
+        test_data$Group <- factor(test_data$Group, levels = all_levels)
+        
+        
+        incProgress(0.2, detail = "Model Training...")
+        
+        # Train Control for 10-fold CV on train_data
+        ctrl <- trainControl(
+          method = "cv",
+          number = 5,
+          verboseIter = FALSE,
+          allowParallel = TRUE
+        )
+        
+        model_type <- input$ml_model
+        method_map <- list("Random Forest" = "rf", "LASSO Regression" = "glmnet", "XGBoost" = "xgbTree")
+        method <- method_map[[model_type]]
+        
+        model_fit <- train(Group ~ ., data = train_data, method = method, trControl = ctrl, tuneLength = 5)
+        
+        incProgress(0.4, detail = "Model Validation...")
+        
+        # Evaluate on validation and test sets
+        val_preds <- factor(predict(model_fit, val_data), levels = all_levels)
+        test_preds <- factor(predict(model_fit, test_data), levels = all_levels)
+        
+        val_conf <- confusionMatrix(val_preds, val_data$Group)
+        test_conf <- confusionMatrix(test_preds, test_data$Group)
+        
+        
+        output$model_summary <- renderPrint({
+          summary(model_fit)
+        })
+        
+        output$model_performance <- renderPrint({
+          list(
+            Validation = val_conf,
+            Test = test_conf
+          )
+        })
+        
+        imp_result(varImp(model_fit))
+        feature_plot <- reactive({
+          imp <- imp_result()
+          req(imp)
+          top_n <- input$featur_top_n
+          imp_df <- imp$importance
+          imp_df$Feature <- rownames(imp_df)
+          top_features <- imp_df[order(-imp_df[, 1]), ][1:min(top_n, nrow(imp_df)), ]
+          
+          if (model_type == "Random Forest") all_model_features$rf <- top_features$Feature
+          if (model_type == "LASSO Regression") all_model_features$lasso <- top_features$Feature
+          if (model_type == "XGBoost") all_model_features$xgb <- top_features$Feature
+          
+          p <- ggplot(top_features, aes(x = reorder(Feature, !!sym(names(top_features)[1])), y = !!sym(names(top_features)[1]))) +
+            geom_col(fill = "steelblue") +
+            coord_flip() +
+            labs(title = "Top Feature Importances", x = "Feature", y = "Importance") +
+            theme_minimal()
+          
+          current_importance_plot(p)
+          p
+        })
+        
+        
+        output$feature_importance <- renderPlot({ feature_plot() })
+        
+        output$download_feature_importance <- downloadHandler(
+          filename = function() paste("feature_importance_plot_", Sys.Date(), ".tiff", sep = ""),
+          content = function(file) {
+            width <- input$feature_width %||% 8
+            height <- input$feature_height %||% 6
+            res <- input$feature_res %||% 300
+            tiff(file, width = width, height = height, units = "in", res = res)
+            print(current_importance_plot())
+            dev.off()
+          }
+        )
+        
+        output$download_model_perf <- downloadHandler(
+          filename = function() {
+            paste("model_performance_", Sys.Date(), ".txt", sep = "")
+          },
+          content = function(file) {
+            sink(file)
+            cat("Validation Performance:\n")
+            print(val_conf)
+            cat("\n\nTest Performance:\n")
+            print(test_conf)
+            sink()
+          }
+        )
+        
+        output$download_combined_features <- downloadHandler(
+          filename = function() paste("combined_model_top_features_", Sys.Date(), ".csv", sep = ""),
+          content = function(file) {
+            max_len <- max(length(all_model_features$rf), length(all_model_features$lasso), length(all_model_features$xgb))
+            df <- data.frame(
+              Random_Forest = head(all_model_features$rf, max_len),
+              LASSO = head(all_model_features$lasso, max_len),
+              XGBoost = head(all_model_features$xgb, max_len),
+              stringsAsFactors = FALSE
+            )
+            df$Common <- Reduce(intersect, list(all_model_features$rf, all_model_features$lasso, all_model_features$xgb))
+            rv$common_genes <- df$Common
+            write.csv(df, file, row.names = FALSE)
+          }
+        )
+
+        if (input$ml_model == "XGBoost") {
+          explainer <- shap.prep(xgb_model = model_fit$finalModel, X_train = model.matrix(Group ~ . - 1, train_data))
+          shap_plot <- shap.plot.summary(explainer)
+          output$shap_plot <- renderPlot({
+            req(input$ml_model == "XGBoost", rv$shap_summary)
+            top_n <- input$featur_top_n
+            shap_df <- rv$shap_summary
+            shap_df <- shap_df[shap_df$Feature %in% head(shap_df[order(-shap_df$MeanSHAP), ]$Feature, top_n), ]
+            ggplot(shap_df, aes(x = reorder(Feature, MeanSHAP), y = MeanSHAP)) +
+              geom_bar(stat = "identity", fill = "steelblue") +
+              coord_flip() +
+              theme_minimal(base_size = 14) +
+              labs(title = "Mean SHAP Values", y = "Mean SHAP", x = "Feature")
+          })
+        }
+        
+        incProgress(1, detail = "Complete")
+      })
+    })
+    
+    onStop(function() {
+      stopCluster(cl)
+      registerDoSEQ()
+    }) 
+    
     
     
     #Search in PubMed & Clinical Trials
     
     debug_log <- reactiveVal("")
-    
     
     # Function to add to debug log
     add_debug <- function(msg) {
@@ -2288,6 +2525,9 @@ allowWGCNAThreads()
           pull(gene) %>%
           head(20)
         genes <- module_genes
+      }else if(input$search_source == "ai_genes") {
+        req(rv$common_genes)
+        genes<-rv$common_genes
       }
       
       # Validate we have genes to search
@@ -2634,6 +2874,9 @@ allowWGCNAThreads()
           gene_list <-  rv$wgcna_modules %>%
             filter(module == input$module_selection3) %>%
             pull(gene) 
+        }else if(input$gene_source== "ai_genes") {
+          req(rv$common_genes)
+          genes<-rv$common_genes
         }
         
         
@@ -2789,6 +3032,9 @@ allowWGCNAThreads()
           filter(module == input$module_selection_db) %>%
           pull(gene) %>%
           head(20)
+      }else if(input$gene_source_db == "ai_genes") {
+        req(rv$common_genes)
+        genes<-rv$common_genes
       }
       
       gene_query <- as.character(gene_list)
@@ -2846,234 +3092,7 @@ allowWGCNAThreads()
     )
     
     
-    
-    
-    #AI Feature Selection
-    
-    cl <- makePSOCKcluster(parallel::detectCores() - 1)
-    registerDoParallel(cl)
-    
-    observeEvent(input$ml_model, {
-      output$model_summary <- renderText({ "" })
-      output$model_performance <- renderText({ "" })
-      output$feature_importance <- renderPlot({ NULL })
-      output$shap_plot <- renderPlot({ NULL })  
-      
-    })
-    
-    all_model_features <- reactiveValues(rf = NULL, lasso = NULL, xgb = NULL)
-    current_importance_plot <- reactiveVal(NULL)
-    imp_result <- reactiveVal(NULL)
-    
-    output$enable_combined_download <- reactive({
-      !is.null(all_model_features$rf) &&
-        !is.null(all_model_features$lasso) &&
-        !is.null(all_model_features$xgb)
-    })
-    outputOptions(output, "enable_combined_download", suspendWhenHidden = FALSE)
-    
-    observe({
-      if (!is.null(all_model_features$rf) &&
-          !is.null(all_model_features$lasso) &&
-          !is.null(all_model_features$xgb)) {
-        shinyjs::enable("download_combined_features")
-      } else {
-        shinyjs::disable("download_combined_features")
-      }
-    })
-    
-    
-    observe({
-      req(input$ai_data_type)
-      if (input$sidebar == "AI_discovery") {
-        isolate({
-          
-          if (input$ai_data_type == "raw" & !is.null(rv$raw_data) & !input$normalized_data) {
-            non_numeric_cols <- names(rv$raw_data)[!sapply(rv$raw_data, is.numeric)]
-            rv$ai_data <- rv$raw_data
-          } else if (input$ai_data_type == "processed" & !is.null(rv$Normalized_data) & !input$normalized_data) {
-            non_numeric_cols <- names(rv$Normalized_data)[!sapply(rv$Normalized_data, is.numeric)]
-            rv$ai_data <- rv$Normalized_data
-          } else if (input$normalized_data & !is.null(rv$raw_data)) {
-            non_numeric_cols <- names(rv$raw_data)[!sapply(rv$raw_data, is.numeric)]
-            updateSelectInput(session, "ai_data_type", choices = "Normalized Data")
-            rv$ai_data <- rv$raw_data
-          }
-          
-        })
-      }
-    })
-    
-    
-    observeEvent(input$run_analysis, {
-      req(rv$ai_data, rv$raw_data)
-      rv$model <- NULL
-      rv$importance <- NULL
-      rv$shap_values <- NULL
-      rv$shap_summary <- NULL
-      
-      output$model_summary <- renderPrint({ NULL })
-      output$feature_importance <- renderPlot({ NULL }, height = 600)
-      output$model_performance <- renderPrint({ NULL })
-      output$shap_plot <- renderPlot({
-        req(input$ml_model == "XGBoost", rv$shap_summary)
-        top_n <- input$shap_top_n
-        shap_df <- head(rv$shap_summary[order(rv$shap_summary$MeanSHAP, decreasing = TRUE), ], top_n)
-        ggplot(shap_df, aes(x = reorder(Feature, MeanSHAP), y = MeanSHAP)) +
-          geom_bar(stat = "identity", fill = "steelblue") +
-          coord_flip() +
-          theme_minimal(base_size = 14) +
-          labs(title = "Mean SHAP Values", y = "Mean SHAP", x = "Feature")
-      })
-      
-      
-      withProgress(message = 'Running ML Pipeline with 5-Fold CV', value = 0, {
-        incProgress(0.1, detail = "Preparing data...")
-        set.seed(123)
-        data <- rv$ai_data  
-        
-        # Drop unused factor levels before splitting
-        data$Group <- as.factor(data$Group)
-        data$Group <- droplevels(data$Group)
-        all_levels <- levels(data$Group)
-        
-        
-        incProgress(0.2, detail = "Data Split...")
-        
-        # Split into train (70%), validation (10%), test (20%)
-        train_idx <- createDataPartition(data$Group, p = 0.7, list = FALSE)
-        train_data <- data[train_idx, ]
-        temp_data <- data[-train_idx, ]
-        
-        val_idx <- createDataPartition(temp_data$Group, p = 0.333, list = FALSE)  # ~10% of total
-        val_data <- temp_data[val_idx, ]
-        test_data <- temp_data[-val_idx, ]
-        
-        # Re-factor with consistent levels
-        train_data$Group <- factor(train_data$Group, levels = all_levels)
-        val_data$Group <- factor(val_data$Group, levels = all_levels)
-        test_data$Group <- factor(test_data$Group, levels = all_levels)
-        
-        
-        incProgress(0.4, detail = "Model Training...")
-        
-        # Train Control for 10-fold CV on train_data
-        ctrl <- trainControl(
-          method = "cv",
-          number = 5,
-          verboseIter = FALSE,
-          allowParallel = TRUE
-        )
-        
-        model_type <- input$ml_model
-        method_map <- list("Random Forest" = "rf", "LASSO Regression" = "glmnet", "XGBoost" = "xgbTree")
-        method <- method_map[[model_type]]
-        
-        model_fit <- train(Group ~ ., data = train_data, method = method, trControl = ctrl, tuneLength = 5)
-        
-        incProgress(0.2, detail = "Model Validation...")
-        
-        # Evaluate on validation and test sets
-        val_preds <- factor(predict(model_fit, val_data), levels = all_levels)
-        test_preds <- factor(predict(model_fit, test_data), levels = all_levels)
-        
-        val_conf <- confusionMatrix(val_preds, val_data$Group)
-        test_conf <- confusionMatrix(test_preds, test_data$Group)
-        
-        
-        output$model_summary <- renderPrint({
-          summary(model_fit)
-        })
-        
-        output$model_performance <- renderPrint({
-          list(
-            Validation = val_conf,
-            Test = test_conf
-          )
-        })
-        
-        imp_result(varImp(model_fit))
-        feature_plot <- reactive({
-          imp <- imp_result()
-          req(imp)
-          top_n <- input$featur_top_n
-          imp_df <- imp$importance
-          imp_df$Feature <- rownames(imp_df)
-          top_features <- imp_df[order(-imp_df[, 1]), ][1:min(top_n, nrow(imp_df)), ]
-          
-          if (model_type == "Random Forest") all_model_features$rf <- top_features$Feature
-          if (model_type == "LASSO Regression") all_model_features$lasso <- top_features$Feature
-          if (model_type == "XGBoost") all_model_features$xgb <- top_features$Feature
-          
-          p <- ggplot(top_features, aes(x = reorder(Feature, !!sym(names(top_features)[1])), y = !!sym(names(top_features)[1]))) +
-            geom_col(fill = "steelblue") +
-            coord_flip() +
-            labs(title = "Top Feature Importances", x = "Feature", y = "Importance") +
-            theme_minimal()
-          
-          current_importance_plot(p)
-          p
-        })
-        
-        
-        output$feature_importance <- renderPlot({ feature_plot() })
-        
-        output$download_feature_importance <- downloadHandler(
-          filename = function() paste("feature_importance_plot_", Sys.Date(), ".tiff", sep = ""),
-          content = function(file) {
-            width <- input$feature_width %||% 8
-            height <- input$feature_height %||% 6
-            res <- input$feature_res %||% 300
-            tiff(file, width = width, height = height, units = "in", res = res)
-            print(current_importance_plot())
-            dev.off()
-          }
-        )
-        
-        output$download_model_perf <- downloadHandler(
-          filename = function() {
-            paste("model_performance_", Sys.Date(), ".txt", sep = "")
-          },
-          content = function(file) {
-            sink(file)
-            cat("Validation Performance:\n")
-            print(val_conf)
-            cat("\n\nTest Performance:\n")
-            print(test_conf)
-            sink()
-          }
-        )
-        
-        output$download_combined_features <- downloadHandler(
-          filename = function() paste("combined_model_top_features_", Sys.Date(), ".csv", sep = ""),
-          content = function(file) {
-            max_len <- max(length(all_model_features$rf), length(all_model_features$lasso), length(all_model_features$xgb))
-            df <- data.frame(
-              Random_Forest = head(all_model_features$rf, max_len),
-              LASSO = head(all_model_features$lasso, max_len),
-              XGBoost = head(all_model_features$xgb, max_len),
-              stringsAsFactors = FALSE
-            )
-            df$Common <- Reduce(intersect, list(all_model_features$rf, all_model_features$lasso, all_model_features$xgb))
-            write.csv(df, file, row.names = FALSE)
-          }
-        )
-        
-        
-        if (input$ml_model == "XGBoost") {
-          explainer <- shap.prep(xgb_model = model_fit$finalModel, X_train = model.matrix(Group ~ . - 1, train_data))
-          shap_plot <- shap.plot.summary(explainer)
-          output$shap_plot <- renderPlot({ shap_plot })
-        }
-        
-        incProgress(1, detail = "Complete")
-      })
-    })
-      
-  onStop(function() {
-      stopCluster(cl)
-      registerDoSEQ()
-    })
+  
 }
 
   shinyApp(ui, server)
