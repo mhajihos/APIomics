@@ -44,7 +44,11 @@ APIomics2<-function()
   suppressMessages(suppressWarnings(library(caret)))
   suppressMessages(suppressWarnings(library(pROC)))
   suppressMessages(suppressWarnings(library(SHAPforxgboost)))
-  allowWGCNAThreads() 
+  suppressMessages(suppressWarnings(library(randomForest)))
+  suppressMessages(suppressWarnings(library(doParallel)))
+  
+  
+allowWGCNAThreads() 
   
   
   # Database search functions
@@ -586,13 +590,14 @@ APIomics2<-function()
         
         tabItem(tabName = "AI_discovery",
                 fluidRow(
-                  box(title = "AI Biomarker Discovery", status = "primary", solidHeader = TRUE,
+                  box(title = "AI Biomarker Discovery [Time Consuming]", status = "primary", solidHeader = TRUE,
                       selectInput("ai_data_type", "Select Data Type", 
                                   choices = c("Raw Count Data" = "raw", "Preprocessed Data" = "processed", "Normalized Data" = "normalized")),
-                      selectInput("ml_model", "Choose Machine Learning Model:",
+                      selectInput("ml_model", "Choose Machine Learning Model",
                                   choices = c("LASSO Regression", "Random Forest", "XGBoost")),
-                      numericInput("shap_top_n", "Number of Top SHAP Features to Show for XGBoost:", value = 10, min = 5, max = 100, step = 1),
-                      actionButton("run_analysis", "Run Analysis")
+                      numericInput("featur_top_n", "Number of Top Features", value = 10, min = 5, max = 100, step = 1),
+                      actionButton("run_analysis", "Run Analysis"),
+                      downloadButton("download_combined_features", "Download All Top Features")
                   )
                 ),
                 fluidRow(
@@ -604,6 +609,9 @@ APIomics2<-function()
                   column(width = 4,
                          box(title = "Feature Importance", status = "info", solidHeader = TRUE, width = 12,
                              plotOutput("feature_importance", height = "600px"),
+                             sliderInput("feature_width", "Width (inches)", min = 4, max = 20, value = 8, width = '400px'),
+                             sliderInput("feature_height", "Height (inches)", min = 4, max = 20, value = 6, width = '400px'),
+                             numericInput("feature_res", "Resolution (dpi)", value = 300, min = 100),
                              downloadButton("download_feature_importance", "Download Feature Importance Plot (TIFF)")
                          )
                          
@@ -2840,10 +2848,41 @@ APIomics2<-function()
     
     
     
-    
-    
-    
     #AI Feature Selection
+    
+    cl <- makePSOCKcluster(parallel::detectCores() - 1)
+    registerDoParallel(cl)
+    
+    observeEvent(input$ml_model, {
+      output$model_summary <- renderText({ "" })
+      output$model_performance <- renderText({ "" })
+      output$feature_importance <- renderPlot({ NULL })
+      output$shap_plot <- renderPlot({ NULL })  
+      
+    })
+    
+    all_model_features <- reactiveValues(rf = NULL, lasso = NULL, xgb = NULL)
+    current_importance_plot <- reactiveVal(NULL)
+    imp_result <- reactiveVal(NULL)
+    
+    output$enable_combined_download <- reactive({
+      !is.null(all_model_features$rf) &&
+        !is.null(all_model_features$lasso) &&
+        !is.null(all_model_features$xgb)
+    })
+    outputOptions(output, "enable_combined_download", suspendWhenHidden = FALSE)
+    
+    observe({
+      if (!is.null(all_model_features$rf) &&
+          !is.null(all_model_features$lasso) &&
+          !is.null(all_model_features$xgb)) {
+        shinyjs::enable("download_combined_features")
+      } else {
+        shinyjs::disable("download_combined_features")
+      }
+    })
+    
+    
     observe({
       req(input$ai_data_type)
       if (input$sidebar == "AI_discovery") {
@@ -2888,162 +2927,154 @@ APIomics2<-function()
       })
       
       
-      withProgress(message = 'Running AI-based analysis', value = 0, {
-      incProgress(0.1, detail = "Preparing data...")
-        
+      withProgress(message = 'Running ML Pipeline with 5-Fold CV', value = 0, {
+        incProgress(0.1, detail = "Preparing data...")
+        set.seed(123)
         data <- rv$ai_data  
         
-        # Ensure no factors in feature set
-        X <- data[, -ncol(data)]
-        for (i in seq_along(X)) {
-          if (is.factor(X[[i]])) {
-            X[[i]] <- as.numeric(as.character(X[[i]]))
-          }
-        }
+        # Drop unused factor levels before splitting
+        data$Group <- as.factor(data$Group)
+        data$Group <- droplevels(data$Group)
+        all_levels <- levels(data$Group)
         
-        # Target variable
-        y_raw <- data[[ncol(data)]]
         
-        if (input$ml_model == "LASSO Regression") {
-          y <- factor(y_raw)
-          if (length(levels(y)) != 2) {
-            stop("LASSO Regression requires a binary classification target.")
-          }
-          y_numeric <- as.numeric(y) - 1
-        } else if (input$ml_model == "Random Forest") {
-          y <- as.factor(as.character(y_raw))
-        } else if (input$ml_model == "XGBoost") {
-          y <- as.numeric(as.factor(as.character(y_raw))) - 1
-        }
+        incProgress(0.2, detail = "Data Split...")
         
-        incProgress(0.3, detail = "Training model...")
+        # Split into train (70%), validation (10%), test (20%)
+        train_idx <- createDataPartition(data$Group, p = 0.7, list = FALSE)
+        train_data <- data[train_idx, ]
+        temp_data <- data[-train_idx, ]
         
-        if (input$ml_model == "LASSO Regression") {
-          cv_fit <- cv.glmnet(as.matrix(X), y_numeric, family = "binomial", alpha = 1)
-          model <- glmnet(as.matrix(X), y_numeric, alpha = 1, lambda = cv_fit$lambda.min, family = "binomial")
-          importance <- as.matrix(coef(model))
-          importance <- importance[rownames(importance) != "(Intercept)", , drop = FALSE]
-          importance <- importance[importance[,1] != 0, , drop = FALSE]
-          importance <- importance[order(abs(importance[, 1]), decreasing = TRUE), , drop = FALSE]
-          
-        } else if (input$ml_model == "Random Forest") {
-          model <- ranger(y ~ ., data = data.frame(X, y = y), importance = "impurity", probability = TRUE)
-          importance <- sort(model$variable.importance, decreasing = TRUE)
-          
-        } else if (input$ml_model == "XGBoost") {
-          dtrain <- xgb.DMatrix(data = as.matrix(X), label = y)
-          model <- xgboost(data = dtrain, nrounds = 50, objective = "binary:logistic", verbose = 0)
-          importance <- xgb.importance(model = model)
-          importance <- data.table::as.data.table(importance)
-          
-          shap <- shap.values(xgb_model = model, X_train = as.matrix(X))
-          mean_shap <- shap$mean_shap_score
-          rv$shap_values <- shap$shap_score
-          rv$shap_summary <- data.frame(Feature = names(mean_shap), MeanSHAP = mean_shap)
-        }
+        val_idx <- createDataPartition(temp_data$Group, p = 0.333, list = FALSE)  # ~10% of total
+        val_data <- temp_data[val_idx, ]
+        test_data <- temp_data[-val_idx, ]
         
-        incProgress(0.8, detail = "Evaluating performance...")
+        # Re-factor with consistent levels
+        train_data$Group <- factor(train_data$Group, levels = all_levels)
+        val_data$Group <- factor(val_data$Group, levels = all_levels)
+        test_data$Group <- factor(test_data$Group, levels = all_levels)
         
-        rv$model <- model
-        rv$importance <- importance
         
-        output$model_summary <- renderPrint({ summary(model) })
+        incProgress(0.4, detail = "Model Training...")
         
-        output$feature_importance <- renderPlot({
-          if (input$ml_model == "XGBoost") {
-            xgb.plot.importance(importance_matrix = importance)
-          } else if (input$ml_model == "LASSO Regression") {
-            barplot(head(importance[,1], 10), names.arg = substr(rownames(importance)[1:10], 1, 25),
-                    main = "Top LASSO Features", las = 2, col = "steelblue", cex.names = 0.8)
-          } else {
-            barplot(head(importance, 10), names.arg = substr(names(importance)[1:10], 1, 25),
-                    main = "Top Features", las = 2, col = "steelblue", cex.names = 0.8)
-          }
-        }, height = 600)
+        # Train Control for 10-fold CV on train_data
+        ctrl <- trainControl(
+          method = "cv",
+          number = 5,
+          verboseIter = FALSE,
+          allowParallel = TRUE
+        )
         
-        output$feature_importance <- renderPlot({
-          req(rv$importance)
-          top_n <- if (!is.null(input$shap_top_n)) input$shap_top_n else 10
-          if (input$ml_model == "XGBoost") {
-            importance_top <- head(rv$importance, top_n)
-            xgb.plot.importance(importance_matrix = data.table::as.data.table(importance_top), top_n = top_n)
-          } else if (input$ml_model == "LASSO Regression") {
-            barplot(head(rv$importance[,1], top_n), names.arg = substr(rownames(rv$importance)[1:top_n], 1, 25),
-                    main = "Top LASSO Features", las = 2, col = "steelblue", cex.names = 0.8)
-          } else {
-            barplot(head(rv$importance, top_n), names.arg = substr(names(rv$importance)[1:top_n], 1, 25),
-                    main = "Top Features", las = 2, col = "steelblue", cex.names = 0.8)
-          }
-        }, height = 600)
-
-        output$shap_plot <- renderPlot({
-          req(input$ml_model == "XGBoost", rv$shap_summary, input$shap_top_n)
-          shap_df <- rv$shap_summary[order(rv$shap_summary$MeanSHAP, decreasing = TRUE), ]
-          top_n <- min(input$shap_top_n, nrow(shap_df))
-          shap_df <- head(shap_df, top_n)
-          ggplot(shap_df, aes(x = reorder(Feature, MeanSHAP), y = MeanSHAP)) +
-            geom_bar(stat = "identity", fill = "steelblue") +
-            coord_flip() +
-            theme_minimal(base_size = 14) +
-            labs(title = paste("Top", top_n, "Mean SHAP Values"), y = "Mean SHAP", x = "Feature")
+        model_type <- input$ml_model
+        method_map <- list("Random Forest" = "rf", "LASSO Regression" = "glmnet", "XGBoost" = "xgbTree")
+        method <- method_map[[model_type]]
+        
+        model_fit <- train(Group ~ ., data = train_data, method = method, trControl = ctrl, tuneLength = 5)
+        
+        incProgress(0.2, detail = "Model Validation...")
+        
+        # Evaluate on validation and test sets
+        val_preds <- factor(predict(model_fit, val_data), levels = all_levels)
+        test_preds <- factor(predict(model_fit, test_data), levels = all_levels)
+        
+        val_conf <- confusionMatrix(val_preds, val_data$Group)
+        test_conf <- confusionMatrix(test_preds, test_data$Group)
+        
+        
+        output$model_summary <- renderPrint({
+          summary(model_fit)
         })
-
+        
         output$model_performance <- renderPrint({
-          req(rv$model)
-          library(caret)
-          library(pROC)
-          if (input$ml_model == "Random Forest") {
-            pred_probs <- predict(rv$model, data = data.frame(rv$raw_data[, -ncol(rv$raw_data)]))$predictions
-            pred_class <- colnames(pred_probs)[apply(pred_probs, 1, which.max)]
-            cm <- confusionMatrix(as.factor(pred_class), as.factor(rv$raw_data[[ncol(rv$raw_data)]]))
-            print(cm)
-          } else if (input$ml_model == "XGBoost") {
-            probs <- predict(rv$model, newdata = xgb.DMatrix(as.matrix(rv$raw_data[, -ncol(rv$raw_data)])))
-            pred <- ifelse(probs > 0.5, 1, 0)
-            actual <- as.numeric(as.factor(rv$raw_data[[ncol(rv$raw_data)]])) - 1
-            cm <- confusionMatrix(as.factor(pred), as.factor(actual))
-            roc_obj <- roc(actual, probs)
-            print(cm)
-            cat("AUC:", auc(roc_obj), "\n")
-          } else if (input$ml_model == "LASSO Regression") {
-            probs <- predict(rv$model, newx = as.matrix(rv$raw_data[, -ncol(rv$raw_data)]), type = "response")
-            pred <- ifelse(probs > 0.5, 1, 0)
-            actual <- as.numeric(as.factor(rv$raw_data[[ncol(rv$raw_data)]])) - 1
-            cm <- confusionMatrix(as.factor(pred), as.factor(actual))
-            roc_obj <- roc(actual, as.numeric(probs))
-            print(cm)
-            cat("AUC:", auc(roc_obj), "\n")
-          }
+          list(
+            Validation = val_conf,
+            Test = test_conf
+          )
         })
         
-        output$download_model_summary <- downloadHandler(
-          filename = function() { paste0("model_summary_", input$ml_model, ".txt") },
+        imp_result(varImp(model_fit))
+        feature_plot <- reactive({
+          imp <- imp_result()
+          req(imp)
+          top_n <- input$featur_top_n
+          imp_df <- imp$importance
+          imp_df$Feature <- rownames(imp_df)
+          top_features <- imp_df[order(-imp_df[, 1]), ][1:min(top_n, nrow(imp_df)), ]
+          
+          if (model_type == "Random Forest") all_model_features$rf <- top_features$Feature
+          if (model_type == "LASSO Regression") all_model_features$lasso <- top_features$Feature
+          if (model_type == "XGBoost") all_model_features$xgb <- top_features$Feature
+          
+          p <- ggplot(top_features, aes(x = reorder(Feature, !!sym(names(top_features)[1])), y = !!sym(names(top_features)[1]))) +
+            geom_col(fill = "steelblue") +
+            coord_flip() +
+            labs(title = "Top Feature Importances", x = "Feature", y = "Importance") +
+            theme_minimal()
+          
+          current_importance_plot(p)
+          p
+        })
+        
+        
+        output$feature_importance <- renderPlot({ feature_plot() })
+        
+        output$download_feature_importance <- downloadHandler(
+          filename = function() paste("feature_importance_plot_", Sys.Date(), ".tiff", sep = ""),
+          content = function(file) {
+            width <- input$feature_width %||% 8
+            height <- input$feature_height %||% 6
+            res <- input$feature_res %||% 300
+            tiff(file, width = width, height = height, units = "in", res = res)
+            print(current_importance_plot())
+            dev.off()
+          }
+        
+        output$download_model_perf <- downloadHandler(
+          filename = function() {
+            paste("model_performance_", Sys.Date(), ".txt", sep = "")
+          },
           content = function(file) {
             sink(file)
-            print(summary(rv$model))
+            cat("Validation Performance:\n")
+            print(val_conf)
+            cat("\n\nTest Performance:\n")
+            print(test_conf)
             sink()
           }
         )
         
-        output$download_feature_importance <- downloadHandler(
-          filename = function() { paste0("feature_importance_plot_", input$ml_model, ".tiff") },
+        output$download_combined_features <- downloadHandler(
+          filename = function() paste("combined_model_top_features_", Sys.Date(), ".csv", sep = ""),
           content = function(file) {
-            tiff(file, width = 8, height = 6, units = "in", res = 300)
-            if (input$ml_model == "XGBoost") {
-              xgb.plot.importance(importance_matrix = importance)
-            } else if (input$ml_model == "LASSO Regression") {
-              barplot(head(importance[,1], 10), names.arg = rownames(importance)[1:10], main = "Top LASSO Features", las = 2, col = "steelblue")
-            } else {
-              barplot(head(importance, 10), main = "Top Features", las = 2, col = "steelblue")
-            }
-            dev.off()
+            max_len <- max(length(all_model_features$rf), length(all_model_features$lasso), length(all_model_features$xgb))
+            df <- data.frame(
+              Random_Forest = head(all_model_features$rf, max_len),
+              LASSO = head(all_model_features$lasso, max_len),
+              XGBoost = head(all_model_features$xgb, max_len),
+              stringsAsFactors = FALSE
+            )
+            df$Common <- Reduce(intersect, list(all_model_features$rf, all_model_features$lasso, all_model_features$xgb))
+            write.csv(df, file, row.names = FALSE)
           }
         )
+        
+        
+        if (input$ml_model == "XGBoost") {
+          explainer <- shap.prep(xgb_model = model_fit$finalModel, X_train = model.matrix(Group ~ . - 1, train_data))
+          shap_plot <- shap.plot.summary(explainer)
+          output$shap_plot <- renderPlot({ shap_plot })
+        }
+        
+        incProgress(1, detail = "Complete")
       })
+    })
       
+  onStop(function() {
+      stopCluster(cl)
+      registerDoSEQ()
     })
 }
-  
+
   shinyApp(ui, server)
 
 }
