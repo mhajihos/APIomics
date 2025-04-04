@@ -530,7 +530,7 @@ allowWGCNAThreads()
                                   choices = c("LASSO Regression", "Random Forest", "XGBoost")),
                       numericInput("featur_top_n", "Number of Top Features", value = 10, min = 5, max = 100, step = 1),
                       actionButton("run_analysis", "Run Analysis"),
-                      downloadButton("download_combined_features", "Download All Top Features")
+                      downloadButton("download_combined_features", "Download All Top Features (Run all models)")
                   )
                 ),
                 fluidRow(
@@ -1978,7 +1978,7 @@ allowWGCNAThreads()
         
         # For KEGG results, convert to readable gene symbols for the dotplot
         if (rv$enrichment_type == "kegg") {
-          enrichment_readable <- setReadable(rv$enrichment_results, OrgDb = org.Hs.eg.db, keyType = "ENTREZID")
+          enrichment_readable <- setReadable(rv$enrichment_results, OrgDb = "org.Hs.eg.db", keyType = "ENTREZID")
           dotplot(enrichment_readable, showCategory = input$top_enriched) +
             theme(axis.text.x = element_text(size = 15), axis.text.y = element_text(size = 15))
         } else {
@@ -2346,10 +2346,11 @@ allowWGCNAThreads()
           imp_df <- imp$importance
           imp_df$Feature <- rownames(imp_df)
           top_features <- imp_df[order(-imp_df[, 1]), ][1:min(top_n, nrow(imp_df)), ]
+          features<-imp_df[order(-imp_df[, 1]), ]
           
-          if (model_type == "Random Forest") all_model_features$rf <- top_features$Feature
-          if (model_type == "LASSO Regression") all_model_features$lasso <- top_features$Feature
-          if (model_type == "XGBoost") all_model_features$xgb <- top_features$Feature
+          if (model_type == "Random Forest") all_model_features$rf <- features$Feature
+          if (model_type == "LASSO Regression") all_model_features$lasso <- features$Feature
+          if (model_type == "XGBoost") all_model_features$xgb <- features$Feature
           
           p <- ggplot(top_features, aes(x = reorder(Feature, !!sym(names(top_features)[1])), y = !!sym(names(top_features)[1]))) +
             geom_col(fill = "steelblue") +
@@ -2527,7 +2528,7 @@ allowWGCNAThreads()
         genes <- module_genes
       }else if(input$search_source == "ai_genes") {
         req(rv$common_genes)
-        genes<-rv$common_genes
+        genes<-unique(rv$common_genes)
       }
       
       # Validate we have genes to search
@@ -2876,7 +2877,7 @@ allowWGCNAThreads()
             pull(gene) 
         }else if(input$gene_source== "ai_genes") {
           req(rv$common_genes)
-          genes<-rv$common_genes
+          genes<-unique(rv$common_genes)
         }
         
         
@@ -3034,7 +3035,7 @@ allowWGCNAThreads()
           head(20)
       }else if(input$gene_source_db == "ai_genes") {
         req(rv$common_genes)
-        genes<-rv$common_genes
+        genes<-unique(rv$common_genes)
       }
       
       gene_query <- as.character(gene_list)
