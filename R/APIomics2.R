@@ -577,7 +577,7 @@ allowWGCNAThreads()
                                    choices = list("DEG Analysis (Top 20 Genes)" = "deg_analysis",
                                                   "Master Regulators" = "master_regulators",
                                                   "Gene Regulators (Top 20 Module-Genes)" = "gene_regulators",
-                                                  "AI Common Feature Genes"="ai_genes")),
+                                                  "AI Common Feature Genes (Top 20 Genes)"="ai_genes")),
                       uiOutput("module_selection"),
                       textInput("disease_filter", "Specify Disease:", value = "Specify a disease"),
                       selectInput("search_field", "Search in:", 
@@ -609,7 +609,7 @@ allowWGCNAThreads()
                                   choices = c("DEG Analysis" = "deg",
                                               "Master Regulators" = "mra",
                                               "Gene Regulators (WGCNA)" = "wgcna",
-                                              "AI Common Feature Genes"="ai_genes")),
+                                              "AI Common Feature Genes (Top 20 Genes)"="ai_genes")),
                       numericInput("qvalue_threshold_DEGEN", "q-value Threshold for the Results", 
                                    value = 0.05, min = 0, max = 1),
                       uiOutput("module_selection"),
@@ -684,7 +684,7 @@ allowWGCNAThreads()
                                   choices = list("DEG Analysis (Top 20 Genes)" = "deg_analysis",
                                                  "Master Regulators" = "master_regulators",
                                                  "Gene Regulators (Top 20 Module-Genes)" = "gene_regulators",
-                                                 "AI Common Feature Genes"="ai_genes")),
+                                                 "AI Common Feature Genes (Top 20 Genes)"="ai_genes")),
                       radioButtons("module_selection_db", "Select Module", choices = c("Only for Gene Regulators")),
                       actionButton("search_database", "Search"))
                   
@@ -1978,7 +1978,7 @@ allowWGCNAThreads()
         
         # For KEGG results, convert to readable gene symbols for the dotplot
         if (rv$enrichment_type == "kegg") {
-          enrichment_readable <- setReadable(rv$enrichment_results, OrgDb = "org.Hs.eg.db", keyType = "ENTREZID")
+          enrichment_readable <- setReadable(rv$enrichment_results, OrgDb = org.Hs.eg.db, keyType = "ENTREZID")
           dotplot(enrichment_readable, showCategory = input$top_enriched) +
             theme(axis.text.x = element_text(size = 15), axis.text.y = element_text(size = 15))
         } else {
@@ -2558,7 +2558,8 @@ allowWGCNAThreads()
         genes <- module_genes
       }else if(input$search_source == "ai_genes") {
         req(rv$common_genes)
-        genes<-unique(rv$common_genes)
+        genes<-unique(rv$common_genes) %>%
+          head(20)
       }
       
       # Validate we have genes to search
@@ -2907,7 +2908,8 @@ allowWGCNAThreads()
             pull(gene) 
         }else if(input$gene_source== "ai_genes") {
           req(rv$common_genes)
-          genes<-unique(rv$common_genes)
+          genes<-unique(rv$common_genes) %>%
+            head(20)
         }
         
         
@@ -3065,7 +3067,8 @@ allowWGCNAThreads()
           head(20)
       }else if(input$gene_source_db == "ai_genes") {
         req(rv$common_genes)
-        genes<-unique(rv$common_genes)
+        genes<-unique(rv$common_genes) %>%
+          head(20)
       }
       
       gene_query <- as.character(gene_list)
