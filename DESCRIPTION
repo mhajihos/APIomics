@@ -40,7 +40,15 @@ Imports:
     jsonlite,
     rentrez,
     visNetwork,
-    data.table
+    data.table,
+    glmnet,
+    ranger,
+    xgboost,
+    caret,
+    pROC,
+    SHAPforxgboost,
+    randomForest,
+    doParallel
 Suggests:
     limma,
     edgeR,
