@@ -545,7 +545,8 @@ allowWGCNAThreads()
                              sliderInput("feature_width", "Width (inches)", min = 4, max = 20, value = 8, width = '400px'),
                              sliderInput("feature_height", "Height (inches)", min = 4, max = 20, value = 6, width = '400px'),
                              numericInput("feature_res", "Resolution (dpi)", value = 300, min = 100),
-                             downloadButton("download_feature_importance", "Download Feature Importance Plot (TIFF)")
+                             downloadButton("download_feature_importance", "Download Feature Importance Plot (TIFF)"),
+                             downloadButton("download_feature_list", "Download Feature List (CSV)")
                          )
                          
                   ),
@@ -577,7 +578,9 @@ allowWGCNAThreads()
                                    choices = list("DEG Analysis (Top 20 Genes)" = "deg_analysis",
                                                   "Master Regulators" = "master_regulators",
                                                   "Gene Regulators (Top 20 Module-Genes)" = "gene_regulators",
-                                                  "AI Common Feature Genes (Top 20 Genes)"="ai_genes")),
+                                                  "Top LASSO-AI Feature Genes"="lasso_ai",
+                                                  "Top RF-AI Feature Genes"="rf_ai",
+                                                  "Top XGB-AI Feature Genes"="xgb_ai")),
                       uiOutput("module_selection"),
                       textInput("disease_filter", "Specify Disease:", value = "Specify a disease"),
                       selectInput("search_field", "Search in:", 
@@ -585,6 +588,12 @@ allowWGCNAThreads()
                                               "MeSH Terms" = "[MeSH Terms]"), 
                                   selected = "[Title/Abstract]"),
                       radioButtons("module_selection2", "Select Module", choices = c("Only for Gene Regulators")),
+                      
+                      conditionalPanel(
+                        condition = "input.search_source == 'lasso_ai' || input.search_source == 'rf_ai' || input.search_source == 'xgb_ai'",
+                      numericInput("importance_value", "Importance Threshold [from 1 to 100]", value = 80, min=1, max = 100)
+                                ),
+                      
                       checkboxInput("clinical_trial_only", "Limit PubMed Search to Clinical Trials", FALSE),
                       actionButton("search", "Search in Pubmed & Clinical Trials"),
                       downloadButton("download_results", "Download Pubmed Results as CSV"),
@@ -609,11 +618,20 @@ allowWGCNAThreads()
                                   choices = c("DEG Analysis" = "deg",
                                               "Master Regulators" = "mra",
                                               "Gene Regulators (WGCNA)" = "wgcna",
-                                              "AI Common Feature Genes (Top 20 Genes)"="ai_genes")),
+                                              "Top LASSO-AI Feature Genes"="lasso_ai",
+                                              "Top RF-AI Feature Genes"="rf_ai",
+                                              "Top XGB-AI Feature Genes"="xgb_ai")),
                       numericInput("qvalue_threshold_DEGEN", "q-value Threshold for the Results", 
                                    value = 0.05, min = 0, max = 1),
                       uiOutput("module_selection"),
                       radioButtons("module_selection3", "Select Module", choices = c("Only for Gene Regulators")),
+                      
+                      conditionalPanel(
+                        condition = "input.gene_source == 'lasso_ai' || input.gene_source == 'rf_ai' || input.gene_source == 'xgb_ai'",
+                        numericInput("importance_value2", "Importance Threshold [from 1 to 100]", value = 80, min=1, max = 100)
+                      ),
+                      
+                      
                       sliderInput("centrality_filter", "Filter Nodes by Centrality:", min = 0, max = 1, value = 0.5, step = 0.05),
                       sliderInput("top_n_results", "Top N Diseases for Network:", min = 1, max = 50, value = 10, step = 1),
                       actionButton("run_disease_network", "Run Analysis")
@@ -684,8 +702,16 @@ allowWGCNAThreads()
                                   choices = list("DEG Analysis (Top 20 Genes)" = "deg_analysis",
                                                  "Master Regulators" = "master_regulators",
                                                  "Gene Regulators (Top 20 Module-Genes)" = "gene_regulators",
-                                                 "AI Common Feature Genes (Top 20 Genes)"="ai_genes")),
+                                                 "Top LASSO-AI Feature Genes"="lasso_ai",
+                                                 "Top RF-AI Feature Genes"="rf_ai",
+                                                 "Top XGB-AI Feature Genes"="xgb_ai")),
                       radioButtons("module_selection_db", "Select Module", choices = c("Only for Gene Regulators")),
+                      
+                      conditionalPanel(
+                        condition = "input.gene_source_db == 'lasso_ai' || input.gene_source_db == 'rf_ai' || input.gene_source_db == 'xgb_ai'",
+                        numericInput("importance_value3", "Importance Threshold [from 1 to 100]", value = 80, min=1, max = 100)
+                      ),
+                      
                       actionButton("search_database", "Search"))
                   
                 ),
@@ -2326,6 +2352,7 @@ allowWGCNAThreads()
     
     
     
+    
     #AI Feature Selection
     cl <- makePSOCKcluster(parallel::detectCores() - 1)
     registerDoParallel(cl)
@@ -2389,6 +2416,7 @@ allowWGCNAThreads()
       rv$importance <- NULL
       rv$shap_values <- NULL
       rv$shap_summary <- NULL
+      rv$feature_lists <- list()
       
       output$model_summary <- renderPrint({ NULL })
       output$feature_importance <- renderPlot({ NULL }, height = 600)
@@ -2471,6 +2499,22 @@ allowWGCNAThreads()
         })
         
         imp_result(varImp(model_fit))
+        imp <- varImp(model_fit)$importance
+        importance_scores <- data.frame(
+          Feature = rownames(imp),
+          Importance = imp[, 1]
+        )
+        rv$importance <- importance_scores[order(-importance_scores$Importance), ]
+        
+        if (input$ml_model == "LASSO Regression") {
+          rv$feature_lists$lasso <- rv$importance
+        } else if (input$ml_model == "Random Forest") {
+          rv$feature_lists$rf <- rv$importance
+        } else if (input$ml_model == "XGBoost") {
+          rv$feature_lists$xgb <- rv$importance
+        }
+        
+        
         feature_plot <- reactive({
           imp <- imp_result()
           req(imp)
@@ -2533,6 +2577,22 @@ allowWGCNAThreads()
           }
         )
         
+        output$download_feature_list <- downloadHandler(
+          filename = function() {
+            paste0("feature_importance_", input$ml_model, "_", Sys.Date(), ".csv")
+          },
+          content = function(file) {
+            req(rv$importance)
+            
+            # Assume rv$importance has columns: Feature and Score
+            imp_df <- rv$importance
+            imp_df_sorted <- imp_df[order(-imp_df[, 2]), ]  # Sort descending by score
+            
+            write.csv(imp_df_sorted, file, row.names = FALSE)
+          }
+        )
+        
+        
         output$download_combined_features <- downloadHandler(
           filename = function() paste("combined_model_top_features_", Sys.Date(), ".csv", sep = ""),
           content = function(file) {
@@ -2564,10 +2624,7 @@ allowWGCNAThreads()
             write.table(feature_df, file, sep = ",", row.names = FALSE, col.names = TRUE, quote = TRUE, na = "")
           }
         )
-        
-        
-        
-
+  
         if (input$ml_model == "XGBoost") {
           explainer <- shap.prep(xgb_model = model_fit$finalModel, X_train = model.matrix(Group ~ . - 1, train_data))
           shap_plot <- shap.plot.summary(explainer)
@@ -2642,10 +2699,6 @@ allowWGCNAThreads()
         )}
     })
     
-    
-    
-    
-    
     # First, add this at the beginning of your server function
     search_results <- reactiveVal()
     
@@ -2676,7 +2729,7 @@ allowWGCNAThreads()
           head(20)
       } else if(input$search_source == "master_regulators") {
         req(rv$mra_results)
-        genes <- rv$mra_results[,1]  # Assuming first column contains gene names
+        genes <- rv$mra_results[,1]  
       } else if(input$search_source == "gene_regulators") {
         req(rv$wgcna_modules)
         req(input$module_selection2)
@@ -2687,12 +2740,16 @@ allowWGCNAThreads()
           pull(gene) %>%
           head(20)
         genes <- module_genes
-      }else if(input$search_source == "ai_genes") {
-        req(rv$common_genes)
-        genes<-unique(rv$common_genes) %>%
-          head(20)
+        
+      }else if(input$search_source == "lasso_ai") {
+        genes <- head(rv$feature_lists$lasso$Feature, n = input$importance_value)
+      }else if(input$search_source == "rf_ai") {
+        genes <- head(rv$feature_lists$rf$Feature, n = input$importance_value)
+      }else if(input$search_source == "xgb_ai") {
+        genes <- head(rv$feature_lists$xgb$Feature, n = input$importance_value)
       }
       
+
       # Validate we have genes to search
       if(is.null(genes) || length(genes) == 0) {
         shinyalert(
@@ -3037,12 +3094,13 @@ allowWGCNAThreads()
           gene_list <-  rv$wgcna_modules %>%
             filter(module == input$module_selection3) %>%
             pull(gene) 
-        }else if(input$gene_source== "ai_genes") {
-          req(rv$common_genes)
-          genes<-unique(rv$common_genes) %>%
-            head(20)
+        }else if(input$gene_source == "lasso_ai") {
+          gene_list <- head(rv$feature_lists$lasso$Feature, n = input$importance_value2)
+        }else if(input$gene_source == "rf_ai") {
+          gene_list <- head(rv$feature_lists$rf$Feature, n = input$importance_value2)
+        }else if(input$gene_source == "xgb_ai") {
+          gene_list <- head(rv$feature_lists$xgb$Feature, n = input$importance_value2)
         }
-        
         
         incProgress(0.2, detail = "Mapping gene IDs")
         entrez_ids <- mapIds(org.Hs.eg.db, keys = gene_list, column = "ENTREZID", keytype = "SYMBOL", multiVals = "first")
@@ -3196,10 +3254,12 @@ allowWGCNAThreads()
           filter(module == input$module_selection_db) %>%
           pull(gene) %>%
           head(20)
-      }else if(input$gene_source_db == "ai_genes") {
-        req(rv$common_genes)
-        genes<-unique(rv$common_genes) %>%
-          head(20)
+      }else if(input$gene_source_db == "lasso_ai") {
+        gene_list <- head(rv$feature_lists$lasso$Feature, n = input$importance_value3)
+      }else if(input$gene_source_db == "rf_ai") {
+        gene_list <- head(rv$feature_lists$rf$Feature, n = input$importance_value3)
+      }else if(input$gene_source_db == "xgb_ai") {
+        gene_list <- head(rv$feature_lists$xgb$Feature, n = input$importance_value3)
       }
       
       gene_query <- as.character(gene_list)
