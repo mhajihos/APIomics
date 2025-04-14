@@ -1918,7 +1918,7 @@ APIomics<-function()
           enrichment_readable <- setReadable(rv$enrichment_results, OrgDb = org.Hs.eg.db, keyType = "ENTREZID")
           dotplot(enrichment_readable, showCategory = input$top_enriched) +
             theme(axis.text.x = element_text(size = 15), axis.text.y = element_text(size = 15))
-        } else {
+        } else if(rv$enrichment_type %in% c("gobp", "gomf", "gocc")) {
           dotplot(rv$enrichment_results, showCategory = input$top_enriched) +
             theme(axis.text.x = element_text(size = 15), axis.text.y = element_text(size = 15))
         }

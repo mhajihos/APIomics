@@ -211,7 +211,7 @@ allowWGCNAThreads()
   `%||%` <- function(x, y) if (is.null(x)) y else x
   
   
-  addResourcePath("static", system.file("www", package = "APIomics", mustWork = TRUE))
+  #addResourcePath("static", system.file("www", package = "APIomics", mustWork = TRUE))
   
   # 1000 MB (1 GB) file size limit
   options(shiny.maxRequestSize = 1000 * 1024^2) 
@@ -725,6 +725,7 @@ allowWGCNAThreads()
       moduleMembership=NULL,
       TOM=NULL,
       net_colors=NULL,
+      enrichment_results=NULL,
       predicted = NULL, 
       regulons = NULL,
       mra_data=NULL,
@@ -1834,7 +1835,15 @@ allowWGCNAThreads()
       # Extract gene list from DEG results
       gene_list <- rv$deg_results$logFC
       names(gene_list) <- rownames(rv$deg_results)
-      gene_list <- sort(gene_list, decreasing = TRUE)
+    gene_list <- gene_list[!is.na(gene_list)]
+    gene_list <- gene_list[!is.na(names(gene_list)) & names(gene_list) != ""]
+    gene_list <- sort(gene_list, decreasing = TRUE)
+    
+    if (is.null(rownames(rv$deg_results))) {
+      showNotification("DEG results lack gene symbols in rownames.", type = "error")
+      return(NULL)
+    }
+    
       
       # Run enrichment analysis based on user selection
       withProgress(message = "Running Enrichment Analysis", value = 0, {
@@ -1904,7 +1913,7 @@ allowWGCNAThreads()
         
         # Save results and type for rendering outputs
         rv$enrichment_results <- enrichment_results
-        rv$enrichment_type <- enrichment_type
+        rv$enrichment_type <- input$enrichment_type
         rv$id_mapping <- id_mapping  # Save the ID mapping for later use
         
         # Also save the original gene list for plots
@@ -1918,7 +1927,7 @@ allowWGCNAThreads()
         results_df <- as.data.frame(rv$enrichment_results)
         
         # For KEGG results, convert gene IDs in the 'core_enrichment' column back to gene symbols
-        if (rv$enrichment_type == "kegg" && !is.null(rv$id_mapping)) {
+        if (input$enrichment_type == "kegg" && !is.null(rv$id_mapping)) {
           # Create a lookup dictionary for ENTREZID to SYMBOL conversion
           id_to_symbol <- setNames(rv$id_mapping$SYMBOL, rv$id_mapping$ENTREZID)
           
@@ -1946,10 +1955,10 @@ allowWGCNAThreads()
         req(rv$enrichment_results)
         
         # Use different network visualization based on enrichment type
-        if (rv$enrichment_type %in% c("gobp", "gomf", "gocc")) {
+        if (input$enrichment_type %in% c("gobp", "gomf", "gocc")) {
           # For GO analysis, use goplot
           goplot(rv$enrichment_results, showCategory = input$top_enriched, title = "GO Enrichment Network")
-        } else if (rv$enrichment_type == "kegg") {
+        } else if (input$enrichment_type == "kegg") {
           # For KEGG analysis, convert gene IDs back to symbols for visualization
           tryCatch({
             # Convert KEGG results to readable format with gene symbols
@@ -1976,15 +1985,137 @@ allowWGCNAThreads()
       output$enrichment_plot <- renderPlot({
         req(rv$enrichment_results)
         
-        # For KEGG results, convert to readable gene symbols for the dotplot
-        if (rv$enrichment_type == "kegg") {
-          enrichment_readable <- setReadable(rv$enrichment_results, OrgDb = org.Hs.eg.db, keyType = "ENTREZID")
-          dotplot(enrichment_readable, showCategory = input$top_enriched) +
-            theme(axis.text.x = element_text(size = 15), axis.text.y = element_text(size = 15))
-        } else {
-          dotplot(rv$enrichment_results, showCategory = input$top_enriched) +
-            theme(axis.text.x = element_text(size = 15), axis.text.y = element_text(size = 15))
-        }
+        tryCatch({
+          # Check if results are empty
+          if (is.null(rv$enrichment_results) || nrow(rv$enrichment_results@result) == 0) {
+            showNotification("No valid enrichment terms to plot.", type = "warning")
+            return(NULL)
+          }
+          
+          # Get the results data frame for inspection
+          result_df <- rv$enrichment_results@result
+          #print(paste("Available columns:", paste(colnames(result_df), collapse=", ")))
+          
+          # Limit number of categories shown
+          show_n <- min(input$top_enriched, nrow(result_df))
+          
+          # Use standard plotting function first
+          if (rv$enrichment_type == "kegg") {
+            tryCatch({
+              enrichment_readable <- setReadable(rv$enrichment_results, 
+                                                 OrgDb = org.Hs.eg.db, 
+                                                 keyType = "ENTREZID")
+              dotplot(enrichment_readable, showCategory = show_n) +
+                ggtitle("KEGG Pathway Enrichment") +
+                theme(axis.text.x = element_text(size = 12), 
+                      axis.text.y = element_text(size = 10))
+            }, error = function(e) {
+              message("Falling back to manual KEGG plot: ", e$message)
+              
+              # Check what size variable is available
+              size_var <- NULL
+              if ("setSize" %in% colnames(result_df)) {
+                size_var <- "setSize"
+              } else if ("Count" %in% colnames(result_df)) {
+                size_var <- "Count" 
+              } else if ("Size" %in% colnames(result_df)) {
+                size_var <- "Size"
+              } else {
+                # Default to a constant size if no appropriate column found
+                size_var <- NULL
+              }
+              
+              # Create a manual dotplot with appropriate columns
+              if (!is.null(size_var)) {
+                p <- ggplot(head(result_df, show_n), 
+                            aes(x = -log10(pvalue), 
+                                y = reorder(Description, -log10(pvalue)))) +
+                  geom_point(aes(size = .data[[size_var]], color = p.adjust)) +
+                  scale_color_continuous(low = "red", high = "blue") +
+                  labs(x = "-log10(p-value)", y = "", title = "KEGG Pathway Enrichment") +
+                  theme_minimal() +
+                  theme(axis.text.y = element_text(size = 10))
+              } else {
+                p <- ggplot(head(result_df, show_n), 
+                            aes(x = -log10(pvalue), 
+                                y = reorder(Description, -log10(pvalue)))) +
+                  geom_point(aes(color = p.adjust)) +
+                  scale_color_continuous(low = "red", high = "blue") +
+                  labs(x = "-log10(p-value)", y = "", title = "KEGG Pathway Enrichment") +
+                  theme_minimal() +
+                  theme(axis.text.y = element_text(size = 10))
+              }
+              return(p)
+            })
+          } else {
+            # For GO terms
+            tryCatch({
+              dotplot(rv$enrichment_results, showCategory = show_n) +
+                ggtitle(paste0("GO ", 
+                               switch(rv$enrichment_type,
+                                      "gobp" = "Biological Process",
+                                      "gomf" = "Molecular Function",
+                                      "gocc" = "Cellular Component"),
+                               " Enrichment")) +
+                theme(axis.text.x = element_text(size = 12), 
+                      axis.text.y = element_text(size = 10))
+            }, error = function(e) {
+              message("Falling back to manual GO plot: ", e$message)
+              
+              # Check what size variable is available
+              size_var <- NULL
+              if ("setSize" %in% colnames(result_df)) {
+                size_var <- "setSize"
+              } else if ("Count" %in% colnames(result_df)) {
+                size_var <- "Count" 
+              } else if ("Size" %in% colnames(result_df)) {
+                size_var <- "Size"
+              } else {
+                # Default to a constant size if no appropriate column found
+                size_var <- NULL
+              }
+              
+              # Create a title based on the enrichment type
+              plot_title <- paste0("GO ", 
+                                   switch(rv$enrichment_type,
+                                          "gobp" = "Biological Process",
+                                          "gomf" = "Molecular Function",
+                                          "gocc" = "Cellular Component"),
+                                   " Enrichment")
+              
+              # Create a manual dotplot with appropriate columns
+              if (!is.null(size_var)) {
+                p <- ggplot(head(result_df, show_n), 
+                            aes(x = -log10(pvalue), 
+                                y = reorder(Description, -log10(pvalue)))) +
+                  geom_point(aes(size = .data[[size_var]], color = p.adjust)) +
+                  scale_color_continuous(low = "red", high = "blue") +
+                  labs(x = "-log10(p-value)", y = "", title = plot_title) +
+                  theme_minimal() +
+                  theme(axis.text.y = element_text(size = 10))
+              } else {
+                p <- ggplot(head(result_df, show_n), 
+                            aes(x = -log10(pvalue), 
+                                y = reorder(Description, -log10(pvalue)))) +
+                  geom_point(aes(color = p.adjust)) +
+                  scale_color_continuous(low = "red", high = "blue") +
+                  labs(x = "-log10(p-value)", y = "", title = plot_title) +
+                  theme_minimal() +
+                  theme(axis.text.y = element_text(size = 10))
+              }
+              return(p)
+            })
+          }
+        }, error = function(e) {
+          # Print detailed error to console for debugging
+          message("Enrichment plot error: ", e$message)
+          showNotification(paste("Plotting failed:", e$message), type = "error")
+          
+          # Return a text-based error plot as last resort
+          plot(x = 1, y = 1, type = "n", axes = FALSE, xlab = "", ylab = "")
+          text(x = 1, y = 1, labels = paste("Error creating plot:", e$message), cex = 1.2)
+          return(NULL)
+        })
       })
     })
     
