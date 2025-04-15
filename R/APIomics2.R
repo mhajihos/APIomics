@@ -523,14 +523,29 @@ allowWGCNAThreads()
         
         tabItem(tabName = "AI_discovery",
                 fluidRow(
-                  box(title = "AI Biomarker Discovery [Time Consuming]", status = "primary", solidHeader = TRUE,
-                      selectInput("ai_data_type", "Select Data Type", 
-                                  choices = c("Raw Count Data" = "raw", "Preprocessed Data" = "processed", "Normalized Data" = "normalized")),
-                      selectInput("ml_model", "Choose Machine Learning Model",
-                                  choices = c("LASSO Regression", "Random Forest", "XGBoost")),
-                      numericInput("featur_top_n", "Number of Top Features", value = 10, min = 5, max = 100, step = 1),
-                      actionButton("run_analysis", "Run Analysis"),
-                      downloadButton("download_combined_features", "Download All Top Sorted Features (Run all models)")
+                  column(width = 6,
+                         box(title = "AI Biomarker Discovery [Time Consuming]", status = "primary", solidHeader = TRUE, width = 12,
+                             selectInput("ai_data_type", "Select Data Type", 
+                                         choices = c("Raw Count Data" = "raw", "Preprocessed Data" = "processed", "Normalized Data" = "normalized")),
+                             selectInput("ml_model", "Choose Machine Learning Model",
+                                         choices = c("LASSO Regression", "Random Forest", "XGBoost")),
+                             numericInput("featur_top_n", "Number of Top Features", value = 10, min = 5, max = 100, step = 1),
+                             actionButton("run_analysis", "Run Analysis"),
+                             downloadButton("download_combined_features", "Download All Top Sorted Features (Run all models)")
+                         )
+                  ),
+                  column(width = 6,
+                         box(title = "Feature Importance Table", status = "primary", solidHeader = TRUE, width = 12,
+                             tabsetPanel(
+                               id = "feature_tables_tabs",
+                               tabPanel("LASSO Features", 
+                                        DTOutput("lasso_feature_table")),
+                               tabPanel("Random Forest Features", 
+                                        DTOutput("rf_feature_table")),
+                               tabPanel("XGBoost Features", 
+                                        DTOutput("xgb_feature_table"))
+                             )
+                         )
                   )
                 ),
                 fluidRow(
@@ -591,7 +606,7 @@ allowWGCNAThreads()
                       
                       conditionalPanel(
                         condition = "input.search_source == 'lasso_ai' || input.search_source == 'rf_ai' || input.search_source == 'xgb_ai'",
-                      numericInput("importance_value", "Importance Threshold [from 1 to 100]", value = 80, min=1, max = 100)
+                      numericInput("importance_value", "Importance Threshold [from 1 to 100]", value = 20, min=1, max = 100)
                                 ),
                       
                       checkboxInput("clinical_trial_only", "Limit PubMed Search to Clinical Trials", FALSE),
@@ -628,7 +643,7 @@ allowWGCNAThreads()
                       
                       conditionalPanel(
                         condition = "input.gene_source == 'lasso_ai' || input.gene_source == 'rf_ai' || input.gene_source == 'xgb_ai'",
-                        numericInput("importance_value2", "Importance Threshold [from 1 to 100]", value = 80, min=1, max = 100)
+                        numericInput("importance_value2", "Importance Threshold [from 1 to 100]", value = 20, min=1, max = 100)
                       ),
                       
                       
@@ -709,7 +724,7 @@ allowWGCNAThreads()
                       
                       conditionalPanel(
                         condition = "input.gene_source_db == 'lasso_ai' || input.gene_source_db == 'rf_ai' || input.gene_source_db == 'xgb_ai'",
-                        numericInput("importance_value3", "Importance Threshold [from 1 to 100]", value = 80, min=1, max = 100)
+                        numericInput("importance_value3", "Importance Threshold [from 1 to 100]", value = 20, min=1, max = 100)
                       ),
                       
                       actionButton("search_database", "Search"))
@@ -2388,6 +2403,7 @@ allowWGCNAThreads()
     })
     
     
+    
     observe({
       req(input$ai_data_type)
       if (input$sidebar == "AI_discovery") {
@@ -2409,30 +2425,20 @@ allowWGCNAThreads()
       }
     })
     
+    rv$model <- NULL
+    rv$importance <- NULL
+    rv$shap_values <- NULL
+    rv$shap_summary <- NULL
+    rv$feature_lists <- list(rf = NULL, lasso = NULL, xgb = NULL)
+    
+    output$model_summary <- renderPrint({ NULL })
+    output$feature_importance <- renderPlot({ NULL }, height = 600)
+    output$model_performance <- renderPrint({ NULL })
+    
     
     observeEvent(input$run_analysis, {
       req(rv$ai_data, rv$raw_data)
-      rv$model <- NULL
-      rv$importance <- NULL
-      rv$shap_values <- NULL
-      rv$shap_summary <- NULL
-      rv$feature_lists <- list()
-      
-      output$model_summary <- renderPrint({ NULL })
-      output$feature_importance <- renderPlot({ NULL }, height = 600)
-      output$model_performance <- renderPrint({ NULL })
-      output$shap_plot <- renderPlot({
-        req(input$ml_model == "XGBoost", rv$shap_summary)
-        top_n <- input$featur_top_n
-        shap_df <- head(rv$shap_summary[order(rv$shap_summary$MeanSHAP, decreasing = TRUE), ], top_n)
-        ggplot(shap_df, aes(x = reorder(Feature, MeanSHAP), y = MeanSHAP)) +
-          geom_bar(stat = "identity", fill = "steelblue") +
-          coord_flip() +
-          theme_minimal(base_size = 14) +
-          labs(title = "Mean SHAP Values", y = "Mean SHAP", x = "Feature")
-      })
-      
-      
+    
       withProgress(message = 'Running ML Pipeline with 5-Fold CV', value = 0, {
         incProgress(0.1, detail = "Preparing data...")
         set.seed(123)
@@ -2506,12 +2512,18 @@ allowWGCNAThreads()
         )
         rv$importance <- importance_scores[order(-importance_scores$Importance), ]
         
-        if (input$ml_model == "LASSO Regression") {
+        if (model_type == "Random Forest") {
+          rv$feature_lists$rf <- rv$importance  # Use the already sorted importance from rv$importance
+          all_model_features$rf <- rv$importance$Feature
+          all_model_important_scores$rf <- rv$importance
+        } else if (model_type == "LASSO Regression") {
           rv$feature_lists$lasso <- rv$importance
-        } else if (input$ml_model == "Random Forest") {
-          rv$feature_lists$rf <- rv$importance
-        } else if (input$ml_model == "XGBoost") {
+          all_model_features$lasso <- rv$importance$Feature
+          all_model_important_scores$lasso <- rv$importance
+        } else if (model_type == "XGBoost") {
           rv$feature_lists$xgb <- rv$importance
+          all_model_features$xgb <- rv$importance$Feature
+          all_model_important_scores$xgb <- rv$importance
         }
         
         
@@ -2592,6 +2604,47 @@ allowWGCNAThreads()
           }
         )
         
+        output$rf_feature_table <- renderDT({
+          req(rv$feature_lists$rf)
+          datatable(rv$feature_lists$rf,
+                    options = list(pageLength = 4, 
+                                   scrollY = "400px",
+                                   dom = 'Blfrtip',
+                                   buttons = c('csv', 'excel')),
+                    rownames = FALSE,
+                    colnames = c("Gene", "Importance"),
+                    extensions = 'Buttons',
+                    selection = 'none') %>%
+            formatRound(columns = "Importance", digits = 4)
+        })
+        
+        output$lasso_feature_table <- renderDT({
+          req(rv$feature_lists$lasso)
+          datatable(rv$feature_lists$lasso,
+                    options = list(pageLength = 4, 
+                                   scrollY = "400px",
+                                   dom = 'Blfrtip',
+                                   buttons = c('csv', 'excel')),
+                    rownames = FALSE,
+                    colnames = c("Gene", "Importance"),
+                    extensions = 'Buttons',
+                    selection = 'none') %>%
+            formatRound(columns = "Importance", digits = 4)
+        })
+        
+        output$xgb_feature_table <- renderDT({
+          req(rv$feature_lists$xgb)
+          datatable(rv$feature_lists$xgb,
+                    options = list(pageLength = 4, 
+                                   scrollY = "400px",
+                                   dom = 'Blfrtip',
+                                   buttons = c('csv', 'excel')),
+                    rownames = FALSE,
+                    colnames = c("Gene", "Importance"),
+                    extensions = 'Buttons',
+                    selection = 'none') %>%
+            formatRound(columns = "Importance", digits = 4)
+        })
         
         output$download_combined_features <- downloadHandler(
           filename = function() paste("combined_model_top_features_", Sys.Date(), ".csv", sep = ""),
@@ -2626,18 +2679,64 @@ allowWGCNAThreads()
         )
   
         if (input$ml_model == "XGBoost") {
-          explainer <- shap.prep(xgb_model = model_fit$finalModel, X_train = model.matrix(Group ~ . - 1, train_data))
-          shap_plot <- shap.plot.summary(explainer)
+          # For XGBoost, we need a different approach to get SHAP values
+          tryCatch({
+            # Create a feature matrix for SHAP calculations
+            feature_matrix <- model.matrix(Group ~ . - 1, train_data)
+            
+            # Get feature names
+            feature_names <- colnames(feature_matrix)
+            
+            # Make predictions with SHAP contribution breakdown
+            # Note: this requires using xgboost's built-in SHAP capability
+            shap_contributions <- predict(model_fit$finalModel, 
+                                          newdata = as.matrix(feature_matrix),
+                                          predcontrib = TRUE)
+            
+            # Last column is usually bias/intercept, remove it
+            if (ncol(shap_contributions) > ncol(feature_matrix)) {
+              shap_contributions <- shap_contributions[, -ncol(shap_contributions)]
+            }
+            
+            # Calculate mean absolute SHAP values for each feature
+            mean_shap <- colMeans(abs(shap_contributions))
+            
+            # Create a data frame for plotting
+            shap_df <- data.frame(
+              Feature = feature_names,
+              MeanSHAP = mean_shap
+            ) %>% 
+              arrange(desc(MeanSHAP))
+            
+            rv$shap_summary <- shap_df
+            rv$shap_values <- shap_contributions
+            
+            # For debugging
+            print("SHAP calculation successful")
+            
+          }, error = function(e) {
+            # Create an error message
+            warning("Error calculating SHAP values: ", e$message)
+            # Create a placeholder summary
+            rv$shap_summary <- data.frame(
+              Feature = colnames(model.matrix(Group ~ . - 1, train_data)),
+              MeanSHAP = 0
+            )
+          })
+        
           output$shap_plot <- renderPlot({
-            req(input$ml_model == "XGBoost", rv$shap_summary)
-            top_n <- input$featur_top_n
-            shap_df <- rv$shap_summary
-            shap_df <- shap_df[shap_df$Feature %in% head(shap_df[order(-shap_df$MeanSHAP), ]$Feature, top_n), ]
-            ggplot(shap_df, aes(x = reorder(Feature, MeanSHAP), y = MeanSHAP)) +
+            req(rv$shap_summary)
+            
+            # Take top 20 features by SHAP value
+            top_features <- head(rv$shap_summary, input$featur_top_n)
+            
+            ggplot(top_features, aes(x = reorder(Feature, MeanSHAP), y = MeanSHAP)) +
               geom_bar(stat = "identity", fill = "steelblue") +
               coord_flip() +
-              theme_minimal(base_size = 14) +
-              labs(title = "Mean SHAP Values", y = "Mean SHAP", x = "Feature")
+              theme_minimal() +
+              labs(x = "Features", y = "Mean |SHAP value|", 
+                   title = paste("Top",input$featur_top_n,"Features by SHAP Importance")) +
+              theme(axis.text.y = element_text(size = 10))
           })
         }
         
@@ -2742,11 +2841,11 @@ allowWGCNAThreads()
         genes <- module_genes
         
       }else if(input$search_source == "lasso_ai") {
-        genes <- head(rv$feature_lists$lasso$Feature, n = input$importance_value)
+        genes <- rv$feature_lists$lasso$Feature [rv$feature_lists$lasso$Importance >= input$importance_value]
       }else if(input$search_source == "rf_ai") {
-        genes <- head(rv$feature_lists$rf$Feature, n = input$importance_value)
+        genes <- rv$feature_lists$rf$Feature [rv$feature_lists$rf$Importance >= input$importance_value]
       }else if(input$search_source == "xgb_ai") {
-        genes <- head(rv$feature_lists$xgb$Feature, n = input$importance_value)
+        genes <- rv$feature_lists$xgb$Feature [rv$feature_lists$xgb$Importance >= input$importance_value]
       }
       
 
