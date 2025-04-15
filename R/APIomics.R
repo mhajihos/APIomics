@@ -3193,12 +3193,12 @@ APIomics<-function()
           gene_list <-  rv$wgcna_modules %>%
             filter(module == input$module_selection3) %>%
             pull(gene) 
-        }else if(input$gene_source == "lasso_ai") {
-          gene_list <- head(rv$feature_lists$lasso$Feature, n = input$importance_value2)
-        }else if(input$gene_source == "rf_ai") {
-          gene_list <- head(rv$feature_lists$rf$Feature, n = input$importance_value2)
-        }else if(input$gene_source == "xgb_ai") {
-          gene_list <- head(rv$feature_lists$xgb$Feature, n = input$importance_value2)
+        }else if(input$search_source == "lasso_ai") {
+          gene_list <- rv$feature_lists$lasso$Feature [rv$feature_lists$lasso$Importance >= input$importance_value]
+        }else if(input$search_source == "rf_ai") {
+          gene_list <- rv$feature_lists$rf$Feature [rv$feature_lists$rf$Importance >= input$importance_value]
+        }else if(input$search_source == "xgb_ai") {
+          gene_list <- rv$feature_lists$xgb$Feature [rv$feature_lists$xgb$Importance >= input$importance_value]
         }
         
         incProgress(0.2, detail = "Mapping gene IDs")
@@ -3353,13 +3353,14 @@ APIomics<-function()
           filter(module == input$module_selection_db) %>%
           pull(gene) %>%
           head(20)
-      }else if(input$gene_source_db == "lasso_ai") {
-        gene_list <- head(rv$feature_lists$lasso$Feature, n = input$importance_value3)
-      }else if(input$gene_source_db == "rf_ai") {
-        gene_list <- head(rv$feature_lists$rf$Feature, n = input$importance_value3)
-      }else if(input$gene_source_db == "xgb_ai") {
-        gene_list <- head(rv$feature_lists$xgb$Feature, n = input$importance_value3)
+      }else if(input$search_source == "lasso_ai") {
+        gene_list <- rv$feature_lists$lasso$Feature [rv$feature_lists$lasso$Importance >= input$importance_value]
+      }else if(input$search_source == "rf_ai") {
+        gene_list <- rv$feature_lists$rf$Feature [rv$feature_lists$rf$Importance >= input$importance_value]
+      }else if(input$search_source == "xgb_ai") {
+        gene_list <- rv$feature_lists$xgb$Feature [rv$feature_lists$xgb$Importance >= input$importance_value]
       }
+      
       
       gene_query <- as.character(gene_list)
       
