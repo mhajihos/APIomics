@@ -37,6 +37,17 @@ APIomics<-function()
   suppressMessages(suppressWarnings(library(visNetwork)))
   suppressMessages(suppressWarnings(library(xml2)))
   suppressMessages(suppressWarnings(library(data.table)))
+  
+  suppressMessages(suppressWarnings(library(glmnet)))
+  suppressMessages(suppressWarnings(library(ranger)))
+  suppressMessages(suppressWarnings(library(xgboost)))
+  suppressMessages(suppressWarnings(library(caret)))
+  suppressMessages(suppressWarnings(library(pROC)))
+  suppressMessages(suppressWarnings(library(SHAPforxgboost)))
+  suppressMessages(suppressWarnings(library(randomForest)))
+  suppressMessages(suppressWarnings(library(doParallel)))
+  
+  
   allowWGCNAThreads() 
   
   
@@ -200,7 +211,7 @@ APIomics<-function()
   `%||%` <- function(x, y) if (is.null(x)) y else x
   
   
-  addResourcePath("static", system.file("www", package = "APIomics", mustWork = TRUE))
+  #addResourcePath("static", system.file("www", package = "APIomics", mustWork = TRUE))
   
   # 1000 MB (1 GB) file size limit
   options(shiny.maxRequestSize = 1000 * 1024^2) 
@@ -215,7 +226,7 @@ APIomics<-function()
         span("APIomics v1.0", style = "margin-left: 10px; font-weight: 600; color: #333;"),
         style = "display: flex; align-items: center; font-size: 22px;"
       ),
-      titleWidth = 250,
+      titleWidth = 350,
       tags$li(
         class = "dropdown",
         style = "padding: 10px;",
@@ -286,6 +297,7 @@ APIomics<-function()
         menuItem("Gene Set Enrichment", tabName = "geneset_enrichment", icon = icon("microscope")),
         menuItem("Gene Regulators", tabName = "gene_regulators", icon = icon("dna")),
         menuItem("Master Regulators", tabName = "master_regulators", icon = icon("crown")),
+        menuItem("AI-Based Discovery", tabName = "AI_discovery", icon = icon("robot")),
         menuItem("Literature Search", tabName = "pubmed_search", icon = icon("search")),
         menuItem("Gene Disease Network", tabName = "gene_disease_network", icon = icon("network-wired")),
         menuItem("Drug Database Search", tabName = "database_search", icon = icon("pills"))
@@ -509,6 +521,70 @@ APIomics<-function()
                 )
         ),
         
+        tabItem(tabName = "AI_discovery",
+                fluidRow(
+                  column(width = 6,
+                         box(title = "AI Biomarker Discovery [Time Consuming]", status = "primary", solidHeader = TRUE, width = 12,
+                             selectInput("ai_data_type", "Select Data Type", 
+                                         choices = c("Raw Count Data" = "raw", "Preprocessed Data" = "processed", "Normalized Data" = "normalized")),
+                             selectInput("ml_model", "Choose Machine Learning Model",
+                                         choices = c("LASSO Regression", "Random Forest", "XGBoost")),
+                             numericInput("featur_top_n", "Number of Top Features", value = 10, min = 5, max = 100, step = 1),
+                             actionButton("run_analysis", "Run Analysis"),
+                             downloadButton("download_combined_features", "Download All Top Sorted Features (Run all models)")
+                         )
+                  ),
+                  column(width = 6,
+                         box(title = "Feature Importance Table", status = "primary", solidHeader = TRUE, width = 12,
+                             tabsetPanel(
+                               id = "feature_tables_tabs",
+                               tabPanel("LASSO Features", 
+                                        DTOutput("lasso_feature_table")),
+                               tabPanel("Random Forest Features", 
+                                        DTOutput("rf_feature_table")),
+                               tabPanel("XGBoost Features", 
+                                        DTOutput("xgb_feature_table"))
+                             )
+                         )
+                  )
+                ),
+                fluidRow(
+                  column(width = 4,
+                         box(title = "Model Summary", status = "info", solidHeader = TRUE, width = 12,
+                             verbatimTextOutput("model_summary")
+                         )
+                  ),
+                  column(width = 4,
+                         box(title = "Feature Importance", status = "info", solidHeader = TRUE, width = 12,
+                             plotOutput("feature_importance", height = "600px"),
+                             sliderInput("feature_width", "Width (inches)", min = 4, max = 20, value = 8, width = '400px'),
+                             sliderInput("feature_height", "Height (inches)", min = 4, max = 20, value = 6, width = '400px'),
+                             numericInput("feature_res", "Resolution (dpi)", value = 300, min = 100),
+                             downloadButton("download_feature_importance", "Download Feature Importance Plot (TIFF)"),
+                             downloadButton("download_feature_list", "Download Feature List (CSV)")
+                         )
+                         
+                  ),
+                  column(width = 4,
+                         box(title = "Model Performance", status = "info", solidHeader = TRUE, width = 12,
+                             verbatimTextOutput("model_performance"),
+                             downloadButton("download_model_perf", "Download Model Performance")
+                             
+                         )
+                  )
+                ),
+                fluidRow(
+                  column(width = 12,
+                         conditionalPanel(
+                           condition = "input.ml_model == 'XGBoost'",
+                           box(title = "SHAP Summary Plot", status = "success", solidHeader = TRUE, width = 12,
+                               plotOutput("shap_plot", height = "500px")
+                           )
+                         )
+                  )
+                )
+        ),
+        
         #Pubmed and CT
         tabItem(tabName = "pubmed_search",
                 fluidRow(
@@ -516,7 +592,10 @@ APIomics<-function()
                       radioButtons("search_source", "Select Source of Terms:",
                                    choices = list("DEG Analysis (Top 20 Genes)" = "deg_analysis",
                                                   "Master Regulators" = "master_regulators",
-                                                  "Gene Regulators (Top 20 Module-Genes)" = "gene_regulators")),
+                                                  "Gene Regulators (Top 20 Module-Genes)" = "gene_regulators",
+                                                  "Top LASSO-AI Feature Genes"="lasso_ai",
+                                                  "Top RF-AI Feature Genes"="rf_ai",
+                                                  "Top XGB-AI Feature Genes"="xgb_ai")),
                       uiOutput("module_selection"),
                       textInput("disease_filter", "Specify Disease:", value = "Specify a disease"),
                       selectInput("search_field", "Search in:", 
@@ -524,6 +603,12 @@ APIomics<-function()
                                               "MeSH Terms" = "[MeSH Terms]"), 
                                   selected = "[Title/Abstract]"),
                       radioButtons("module_selection2", "Select Module", choices = c("Only for Gene Regulators")),
+                      
+                      conditionalPanel(
+                        condition = "input.search_source == 'lasso_ai' || input.search_source == 'rf_ai' || input.search_source == 'xgb_ai'",
+                        numericInput("importance_value", "Importance Threshold [from 1 to 100]", value = 1, min=1, max = 100)
+                      ),
+                      
                       checkboxInput("clinical_trial_only", "Limit PubMed Search to Clinical Trials", FALSE),
                       actionButton("search", "Search in Pubmed & Clinical Trials"),
                       downloadButton("download_results", "Download Pubmed Results as CSV"),
@@ -547,11 +632,21 @@ APIomics<-function()
                       selectInput("gene_source", "Select Source of Genes:",
                                   choices = c("DEG Analysis" = "deg",
                                               "Master Regulators" = "mra",
-                                              "Gene Regulators (WGCNA)" = "wgcna")),
+                                              "Gene Regulators (WGCNA)" = "wgcna",
+                                              "Top LASSO-AI Feature Genes"="lasso_ai",
+                                              "Top RF-AI Feature Genes"="rf_ai",
+                                              "Top XGB-AI Feature Genes"="xgb_ai")),
                       numericInput("qvalue_threshold_DEGEN", "q-value Threshold for the Results", 
                                    value = 0.05, min = 0, max = 1),
                       uiOutput("module_selection"),
                       radioButtons("module_selection3", "Select Module", choices = c("Only for Gene Regulators")),
+                      
+                      conditionalPanel(
+                        condition = "input.gene_source == 'lasso_ai' || input.gene_source == 'rf_ai' || input.gene_source == 'xgb_ai'",
+                        numericInput("importance_value2", "Importance Threshold [from 1 to 100]", value = 1, min=1, max = 100)
+                      ),
+                      
+                      
                       sliderInput("centrality_filter", "Filter Nodes by Centrality:", min = 0, max = 1, value = 0.5, step = 0.05),
                       sliderInput("top_n_results", "Top N Diseases for Network:", min = 1, max = 50, value = 10, step = 1),
                       actionButton("run_disease_network", "Run Analysis")
@@ -621,8 +716,17 @@ APIomics<-function()
                       selectInput("gene_source_db", "Select Gene List:", 
                                   choices = list("DEG Analysis (Top 20 Genes)" = "deg_analysis",
                                                  "Master Regulators" = "master_regulators",
-                                                 "Gene Regulators (Top 20 Module-Genes)" = "gene_regulators")),
+                                                 "Gene Regulators (Top 20 Module-Genes)" = "gene_regulators",
+                                                 "Top LASSO-AI Feature Genes"="lasso_ai",
+                                                 "Top RF-AI Feature Genes"="rf_ai",
+                                                 "Top XGB-AI Feature Genes"="xgb_ai")),
                       radioButtons("module_selection_db", "Select Module", choices = c("Only for Gene Regulators")),
+                      
+                      conditionalPanel(
+                        condition = "input.gene_source_db == 'lasso_ai' || input.gene_source_db == 'rf_ai' || input.gene_source_db == 'xgb_ai'",
+                        numericInput("importance_value3", "Importance Threshold [from 1 to 100]", value = 1, min=1, max = 100)
+                      ),
+                      
                       actionButton("search_database", "Search"))
                   
                 ),
@@ -647,7 +751,7 @@ APIomics<-function()
   server <- function(input, output, session) {
     # Reactive values to store data across tabs
     
-      rv <- reactiveValues(
+    rv <- reactiveValues(
       raw_data = NULL,
       preprocessed_data = NULL,
       Normalized_data=NULL,
@@ -662,11 +766,14 @@ APIomics<-function()
       moduleMembership=NULL,
       TOM=NULL,
       net_colors=NULL,
+      enrichment_results=NULL,
       predicted = NULL, 
       regulons = NULL,
       mra_data=NULL,
       mra_results=NULL,
-      all_results=NULL
+      all_results=NULL,
+      ai_data=NULL,
+      common_genes=NULL
     )
     
     # Initialize shinyjs and disable tabs except "Data Input"
@@ -811,7 +918,7 @@ APIomics<-function()
             updateSelectInput(session, "data_type", choices = "Normalized Data")
             updateSelectInput(session, "comparison_group", choices = non_numeric_cols)
             updateSelectInput(session, "deg_method", choices = "voom")
-           # shinyalert("Note", "Normalized data provided in the Data Input tab. \nSelect limma method for Normalized Data.")
+            # shinyalert("Note", "Normalized data provided in the Data Input tab. \nSelect limma method for Normalized Data.")
             rv$deg_data <- rv$raw_data
             deg_alert_shown(TRUE)
           }
@@ -1181,18 +1288,18 @@ APIomics<-function()
         }
       )
       
-
-    # Download DEG Results
-    output$download_deg <- downloadHandler(
-      filename = function() {
-        paste("deg_results_", Sys.Date(), ".csv", sep="")
-      },
-      content = function(file) {
-        write.csv(rv$deg_results, file, row.names = TRUE)
-      }
-    )
-    
-  })    
+      
+      # Download DEG Results
+      output$download_deg <- downloadHandler(
+        filename = function() {
+          paste("deg_results_", Sys.Date(), ".csv", sep="")
+        },
+        content = function(file) {
+          write.csv(rv$deg_results, file, row.names = TRUE)
+        }
+      )
+      
+    })    
     
     
     
@@ -1221,8 +1328,6 @@ APIomics<-function()
         })
       }
     })
-    
-    
     
     
     # Gene Regulators Tab
@@ -1771,7 +1876,15 @@ APIomics<-function()
       # Extract gene list from DEG results
       gene_list <- rv$deg_results$logFC
       names(gene_list) <- rownames(rv$deg_results)
+      gene_list <- gene_list[!is.na(gene_list)]
+      gene_list <- gene_list[!is.na(names(gene_list)) & names(gene_list) != ""]
       gene_list <- sort(gene_list, decreasing = TRUE)
+      
+      if (is.null(rownames(rv$deg_results))) {
+        showNotification("DEG results lack gene symbols in rownames.", type = "error")
+        return(NULL)
+      }
+      
       
       # Run enrichment analysis based on user selection
       withProgress(message = "Running Enrichment Analysis", value = 0, {
@@ -1841,7 +1954,7 @@ APIomics<-function()
         
         # Save results and type for rendering outputs
         rv$enrichment_results <- enrichment_results
-        rv$enrichment_type <- enrichment_type
+        rv$enrichment_type <- input$enrichment_type
         rv$id_mapping <- id_mapping  # Save the ID mapping for later use
         
         # Also save the original gene list for plots
@@ -1855,7 +1968,7 @@ APIomics<-function()
         results_df <- as.data.frame(rv$enrichment_results)
         
         # For KEGG results, convert gene IDs in the 'core_enrichment' column back to gene symbols
-        if (rv$enrichment_type == "kegg" && !is.null(rv$id_mapping)) {
+        if (input$enrichment_type == "kegg" && !is.null(rv$id_mapping)) {
           # Create a lookup dictionary for ENTREZID to SYMBOL conversion
           id_to_symbol <- setNames(rv$id_mapping$SYMBOL, rv$id_mapping$ENTREZID)
           
@@ -1883,10 +1996,10 @@ APIomics<-function()
         req(rv$enrichment_results)
         
         # Use different network visualization based on enrichment type
-        if (rv$enrichment_type %in% c("gobp", "gomf", "gocc")) {
+        if (input$enrichment_type %in% c("gobp", "gomf", "gocc")) {
           # For GO analysis, use goplot
           goplot(rv$enrichment_results, showCategory = input$top_enriched, title = "GO Enrichment Network")
-        } else if (rv$enrichment_type == "kegg") {
+        } else if (input$enrichment_type == "kegg") {
           # For KEGG analysis, convert gene IDs back to symbols for visualization
           tryCatch({
             # Convert KEGG results to readable format with gene symbols
@@ -1913,15 +2026,137 @@ APIomics<-function()
       output$enrichment_plot <- renderPlot({
         req(rv$enrichment_results)
         
-        # For KEGG results, convert to readable gene symbols for the dotplot
-        if (rv$enrichment_type == "kegg") {
-          enrichment_readable <- setReadable(rv$enrichment_results, OrgDb = org.Hs.eg.db, keyType = "ENTREZID")
-          dotplot(enrichment_readable, showCategory = input$top_enriched) +
-            theme(axis.text.x = element_text(size = 15), axis.text.y = element_text(size = 15))
-        } else if(rv$enrichment_type %in% c("gobp", "gomf", "gocc")) {
-          dotplot(rv$enrichment_results, showCategory = input$top_enriched) +
-            theme(axis.text.x = element_text(size = 15), axis.text.y = element_text(size = 15))
-        }
+        tryCatch({
+          # Check if results are empty
+          if (is.null(rv$enrichment_results) || nrow(rv$enrichment_results@result) == 0) {
+            showNotification("No valid enrichment terms to plot.", type = "warning")
+            return(NULL)
+          }
+          
+          # Get the results data frame for inspection
+          result_df <- rv$enrichment_results@result
+          #print(paste("Available columns:", paste(colnames(result_df), collapse=", ")))
+          
+          # Limit number of categories shown
+          show_n <- min(input$top_enriched, nrow(result_df))
+          
+          # Use standard plotting function first
+          if (rv$enrichment_type == "kegg") {
+            tryCatch({
+              enrichment_readable <- setReadable(rv$enrichment_results, 
+                                                 OrgDb = org.Hs.eg.db, 
+                                                 keyType = "ENTREZID")
+              dotplot(enrichment_readable, showCategory = show_n) +
+                ggtitle("KEGG Pathway Enrichment") +
+                theme(axis.text.x = element_text(size = 12), 
+                      axis.text.y = element_text(size = 10))
+            }, error = function(e) {
+              message("Falling back to manual KEGG plot: ", e$message)
+              
+              # Check what size variable is available
+              size_var <- NULL
+              if ("setSize" %in% colnames(result_df)) {
+                size_var <- "setSize"
+              } else if ("Count" %in% colnames(result_df)) {
+                size_var <- "Count" 
+              } else if ("Size" %in% colnames(result_df)) {
+                size_var <- "Size"
+              } else {
+                # Default to a constant size if no appropriate column found
+                size_var <- NULL
+              }
+              
+              # Create a manual dotplot with appropriate columns
+              if (!is.null(size_var)) {
+                p <- ggplot(head(result_df, show_n), 
+                            aes(x = -log10(pvalue), 
+                                y = reorder(Description, -log10(pvalue)))) +
+                  geom_point(aes(size = .data[[size_var]], color = p.adjust)) +
+                  scale_color_continuous(low = "red", high = "blue") +
+                  labs(x = "-log10(p-value)", y = "", title = "KEGG Pathway Enrichment") +
+                  theme_minimal() +
+                  theme(axis.text.y = element_text(size = 10))
+              } else {
+                p <- ggplot(head(result_df, show_n), 
+                            aes(x = -log10(pvalue), 
+                                y = reorder(Description, -log10(pvalue)))) +
+                  geom_point(aes(color = p.adjust)) +
+                  scale_color_continuous(low = "red", high = "blue") +
+                  labs(x = "-log10(p-value)", y = "", title = "KEGG Pathway Enrichment") +
+                  theme_minimal() +
+                  theme(axis.text.y = element_text(size = 10))
+              }
+              return(p)
+            })
+          } else {
+            # For GO terms
+            tryCatch({
+              dotplot(rv$enrichment_results, showCategory = show_n) +
+                ggtitle(paste0("GO ", 
+                               switch(rv$enrichment_type,
+                                      "gobp" = "Biological Process",
+                                      "gomf" = "Molecular Function",
+                                      "gocc" = "Cellular Component"),
+                               " Enrichment")) +
+                theme(axis.text.x = element_text(size = 12), 
+                      axis.text.y = element_text(size = 10))
+            }, error = function(e) {
+              message("Falling back to manual GO plot: ", e$message)
+              
+              # Check what size variable is available
+              size_var <- NULL
+              if ("setSize" %in% colnames(result_df)) {
+                size_var <- "setSize"
+              } else if ("Count" %in% colnames(result_df)) {
+                size_var <- "Count" 
+              } else if ("Size" %in% colnames(result_df)) {
+                size_var <- "Size"
+              } else {
+                # Default to a constant size if no appropriate column found
+                size_var <- NULL
+              }
+              
+              # Create a title based on the enrichment type
+              plot_title <- paste0("GO ", 
+                                   switch(rv$enrichment_type,
+                                          "gobp" = "Biological Process",
+                                          "gomf" = "Molecular Function",
+                                          "gocc" = "Cellular Component"),
+                                   " Enrichment")
+              
+              # Create a manual dotplot with appropriate columns
+              if (!is.null(size_var)) {
+                p <- ggplot(head(result_df, show_n), 
+                            aes(x = -log10(pvalue), 
+                                y = reorder(Description, -log10(pvalue)))) +
+                  geom_point(aes(size = .data[[size_var]], color = p.adjust)) +
+                  scale_color_continuous(low = "red", high = "blue") +
+                  labs(x = "-log10(p-value)", y = "", title = plot_title) +
+                  theme_minimal() +
+                  theme(axis.text.y = element_text(size = 10))
+              } else {
+                p <- ggplot(head(result_df, show_n), 
+                            aes(x = -log10(pvalue), 
+                                y = reorder(Description, -log10(pvalue)))) +
+                  geom_point(aes(color = p.adjust)) +
+                  scale_color_continuous(low = "red", high = "blue") +
+                  labs(x = "-log10(p-value)", y = "", title = plot_title) +
+                  theme_minimal() +
+                  theme(axis.text.y = element_text(size = 10))
+              }
+              return(p)
+            })
+          }
+        }, error = function(e) {
+          # Print detailed error to console for debugging
+          message("Enrichment plot error: ", e$message)
+          showNotification(paste("Plotting failed:", e$message), type = "error")
+          
+          # Return a text-based error plot as last resort
+          plot(x = 1, y = 1, type = "n", axes = FALSE, xlab = "", ylab = "")
+          text(x = 1, y = 1, labels = paste("Error creating plot:", e$message), cex = 1.2)
+          return(NULL)
+        })
       })
     })
     
@@ -2026,7 +2261,7 @@ APIomics<-function()
     })
     
     
-    # Update the observeEvent section for MRA
+    # observeEvent section for MRA
     observeEvent(input$run_mra, {
       req(rv$deg_results)
       req(rv$mra_data)
@@ -2133,11 +2368,392 @@ APIomics<-function()
     
     
     
+    #AI Feature Selection
+    observeEvent(input$ml_model, {
+      output$model_summary <- renderText({ "" })
+      output$model_performance <- renderText({ "" })
+      output$feature_importance <- renderPlot({ NULL })
+      output$shap_plot <- renderPlot({ NULL })  
+      
+    })
+    
+    all_model_features <- reactiveValues(rf = NULL, lasso = NULL, xgb = NULL)
+    all_model_important_scores <- reactiveValues(rf = NULL, lasso = NULL, xgb = NULL)
+    current_importance_plot <- reactiveVal(NULL)
+    imp_result <- reactiveVal(NULL)
+    
+    output$enable_combined_download <- reactive({
+      !is.null(all_model_features$rf) &&
+        !is.null(all_model_features$lasso) &&
+        !is.null(all_model_features$xgb)
+    })
+    outputOptions(output, "enable_combined_download", suspendWhenHidden = FALSE)
+    
+    observe({
+      if (!is.null(all_model_features$rf) &&
+          !is.null(all_model_features$lasso) &&
+          !is.null(all_model_features$xgb)) {
+        shinyjs::enable("download_combined_features")
+      } else {
+        shinyjs::disable("download_combined_features")
+      }
+    })
+    
+    
+    
+    observe({
+      req(input$ai_data_type)
+      if (input$sidebar == "AI_discovery") {
+        isolate({
+          
+          if (input$ai_data_type == "raw" & !is.null(rv$raw_data) & !input$normalized_data) {
+            non_numeric_cols <- names(rv$raw_data)[!sapply(rv$raw_data, is.numeric)]
+            rv$ai_data <- rv$raw_data
+          } else if (input$ai_data_type == "processed" & !is.null(rv$Normalized_data) & !input$normalized_data) {
+            non_numeric_cols <- names(rv$Normalized_data)[!sapply(rv$Normalized_data, is.numeric)]
+            rv$ai_data <- rv$Normalized_data
+          } else if (input$normalized_data & !is.null(rv$raw_data)) {
+            non_numeric_cols <- names(rv$raw_data)[!sapply(rv$raw_data, is.numeric)]
+            updateSelectInput(session, "ai_data_type", choices = "Normalized Data")
+            rv$ai_data <- rv$raw_data
+          }
+          
+        })
+      }
+    })
+    
+    rv$model <- NULL
+    rv$importance <- NULL
+    rv$shap_values <- NULL
+    rv$shap_summary <- NULL
+    rv$feature_lists <- list(rf = NULL, lasso = NULL, xgb = NULL)
+    
+    output$model_summary <- renderPrint({ NULL })
+    output$feature_importance <- renderPlot({ NULL }, height = 600)
+    output$model_performance <- renderPrint({ NULL })
+    
+    
+    observeEvent(input$run_analysis, {
+      req(rv$ai_data, rv$raw_data)
+      
+      withProgress(message = 'Running ML Pipeline with 5-Fold CV', value = 0, {
+        incProgress(0.1, detail = "Preparing data...")
+        set.seed(123)
+        data <- rv$ai_data  
+        
+        # Drop unused factor levels before splitting
+        data$Group <- as.factor(data$Group)
+        data$Group <- droplevels(data$Group)
+        all_levels <- levels(data$Group)
+        
+        
+        incProgress(0.2, detail = "Data Split...")
+        
+        # Split into train (70%), validation (10%), test (20%)
+        train_idx <- createDataPartition(data$Group, p = 0.7, list = FALSE)
+        train_data <- data[train_idx, ]
+        temp_data <- data[-train_idx, ]
+        
+        val_idx <- createDataPartition(temp_data$Group, p = 0.333, list = FALSE)  # ~10% of total
+        val_data <- temp_data[val_idx, ]
+        test_data <- temp_data[-val_idx, ]
+        
+        # Re-factor with consistent levels
+        train_data$Group <- factor(train_data$Group, levels = all_levels)
+        val_data$Group <- factor(val_data$Group, levels = all_levels)
+        test_data$Group <- factor(test_data$Group, levels = all_levels)
+        
+        
+        incProgress(0.2, detail = "Model Training...")
+        
+        cl <- makePSOCKcluster(parallel::detectCores() - 1)
+        registerDoParallel(cl)
+        
+        # Train Control for 10-fold CV on train_data
+        ctrl <- trainControl(
+          method = "cv",
+          number = 5,
+          verboseIter = FALSE,
+          allowParallel = TRUE
+        )
+        
+        model_type <- input$ml_model
+        method_map <- list("Random Forest" = "rf", "LASSO Regression" = "glmnet", "XGBoost" = "xgbTree")
+        method <- method_map[[model_type]]
+        
+        model_fit <- train(Group ~ ., data = train_data, method = method, trControl = ctrl, tuneLength = 5)
+        
+        incProgress(0.4, detail = "Model Validation...")
+        
+        # Evaluate on validation and test sets
+        val_preds <- factor(predict(model_fit, val_data), levels = all_levels)
+        test_preds <- factor(predict(model_fit, test_data), levels = all_levels)
+        
+        val_conf <- confusionMatrix(val_preds, val_data$Group)
+        test_conf <- confusionMatrix(test_preds, test_data$Group)
+        
+        
+        output$model_summary <- renderPrint({
+          summary(model_fit)
+        })
+        
+        output$model_performance <- renderPrint({
+          list(
+            Validation = val_conf,
+            Test = test_conf
+          )
+        })
+        
+        imp_result(varImp(model_fit))
+        imp <- varImp(model_fit)$importance
+        importance_scores <- data.frame(
+          Feature = rownames(imp),
+          Importance = imp[, 1]
+        )
+        rv$importance <- importance_scores[order(-importance_scores$Importance), ]
+        
+        if (model_type == "Random Forest") {
+          rv$feature_lists$rf <- rv$importance  # Use the already sorted importance from rv$importance
+          all_model_features$rf <- rv$importance$Feature
+          all_model_important_scores$rf <- rv$importance
+        } else if (model_type == "LASSO Regression") {
+          rv$feature_lists$lasso <- rv$importance
+          all_model_features$lasso <- rv$importance$Feature
+          all_model_important_scores$lasso <- rv$importance
+        } else if (model_type == "XGBoost") {
+          rv$feature_lists$xgb <- rv$importance
+          all_model_features$xgb <- rv$importance$Feature
+          all_model_important_scores$xgb <- rv$importance
+        }
+        
+        
+        feature_plot <- reactive({
+          imp <- imp_result()
+          req(imp)
+          top_n <- input$featur_top_n
+          imp_df <- imp$importance
+          imp_df$Feature <- rownames(imp_df)
+          top_features <- imp_df[order(-imp_df[, 1]), ][1:min(top_n, nrow(imp_df)), ]
+          features<-imp_df[order(-imp_df[, 1]), ]
+          
+          if (model_type == "Random Forest") {
+            all_model_features$rf <- features$Feature
+            all_model_important_scores$rf <- features
+          }
+          if (model_type == "LASSO Regression") {
+            all_model_features$lasso <- features$Feature
+            all_model_important_scores$lasso <- features
+          }
+          if (model_type == "XGBoost") {
+            all_model_features$xgb <- features$Feature
+            all_model_important_scores$xgb <- features
+          }
+          
+          
+          p <- ggplot(top_features, aes(x = reorder(Feature, !!sym(names(top_features)[1])), y = !!sym(names(top_features)[1]))) +
+            geom_col(fill = "steelblue") +
+            coord_flip() +
+            labs(title = "Top Feature Importances", x = "Feature", y = "Importance") +
+            theme_minimal()
+          
+          current_importance_plot(p)
+          p
+        })
+        
+        
+        output$feature_importance <- renderPlot({ feature_plot() })
+        
+        output$download_feature_importance <- downloadHandler(
+          filename = function() paste("feature_importance_plot_", Sys.Date(), ".tiff", sep = ""),
+          content = function(file) {
+            width <- input$feature_width %||% 8
+            height <- input$feature_height %||% 6
+            res <- input$feature_res %||% 300
+            tiff(file, width = width, height = height, units = "in", res = res)
+            print(current_importance_plot())
+            dev.off()
+          }
+        )
+        
+        output$download_model_perf <- downloadHandler(
+          filename = function() {
+            paste("model_performance_", Sys.Date(), ".txt", sep = "")
+          },
+          content = function(file) {
+            sink(file)
+            cat("Validation Performance:\n")
+            print(val_conf)
+            cat("\n\nTest Performance:\n")
+            print(test_conf)
+            sink()
+          }
+        )
+        
+        output$download_feature_list <- downloadHandler(
+          filename = function() {
+            paste0("feature_importance_", input$ml_model, "_", Sys.Date(), ".csv")
+          },
+          content = function(file) {
+            req(rv$importance)
+            
+            # Assume rv$importance has columns: Feature and Score
+            imp_df <- rv$importance
+            imp_df_sorted <- imp_df[order(-imp_df[, 2]), ]  # Sort descending by score
+            
+            write.csv(imp_df_sorted, file, row.names = FALSE)
+          }
+        )
+        
+        output$rf_feature_table <- renderDT({
+          req(rv$feature_lists$rf)
+          datatable(rv$feature_lists$rf,
+                    options = list(pageLength = 4, 
+                                   scrollY = "400px",
+                                   dom = 'Blfrtip',
+                                   buttons = c('csv', 'excel')),
+                    rownames = FALSE,
+                    colnames = c("Gene", "Importance"),
+                    extensions = 'Buttons',
+                    selection = 'none') %>%
+            formatRound(columns = "Importance", digits = 4)
+        })
+        
+        output$lasso_feature_table <- renderDT({
+          req(rv$feature_lists$lasso)
+          datatable(rv$feature_lists$lasso,
+                    options = list(pageLength = 4, 
+                                   scrollY = "400px",
+                                   dom = 'Blfrtip',
+                                   buttons = c('csv', 'excel')),
+                    rownames = FALSE,
+                    colnames = c("Gene", "Importance"),
+                    extensions = 'Buttons',
+                    selection = 'none') %>%
+            formatRound(columns = "Importance", digits = 4)
+        })
+        
+        output$xgb_feature_table <- renderDT({
+          req(rv$feature_lists$xgb)
+          datatable(rv$feature_lists$xgb,
+                    options = list(pageLength = 4, 
+                                   scrollY = "400px",
+                                   dom = 'Blfrtip',
+                                   buttons = c('csv', 'excel')),
+                    rownames = FALSE,
+                    colnames = c("Gene", "Importance"),
+                    extensions = 'Buttons',
+                    selection = 'none') %>%
+            formatRound(columns = "Importance", digits = 4)
+        })
+        
+        output$download_combined_features <- downloadHandler(
+          filename = function() paste("combined_model_top_features_", Sys.Date(), ".csv", sep = ""),
+          content = function(file) {
+            rf_sorted <- all_model_important_scores$rf[order(-all_model_important_scores$rf[, 1]), "Feature"]
+            lasso_sorted <- all_model_important_scores$lasso[order(-all_model_important_scores$lasso[, 1]), "Feature"]
+            xgb_sorted <- all_model_important_scores$xgb[order(-all_model_important_scores$xgb[, 1]), "Feature"]
+            
+            # Create a named list of sorted features
+            feature_lists <- list(
+              Random_Forest = rf_sorted,
+              LASSO = lasso_sorted,
+              XGBoost = xgb_sorted
+            )
+            
+            # Determine the max length for proper binding
+            max_len <- max(sapply(feature_lists, length))
+            
+            # Convert to a data.frame with ragged columns (shorter columns just leave blanks)
+            feature_df <- as.data.frame(lapply(feature_lists, function(x) {
+              length(x) <- max_len
+              return(x)
+            }), stringsAsFactors = FALSE)
+            
+            # Add common features (intersection, sorted alphabetically for clarity)
+            feature_df$Common <- sort(Reduce(intersect, feature_lists))
+            rv$common_genes <- feature_df$Common
+            
+            # Write to file (blanks instead of NA)
+            write.table(feature_df, file, sep = ",", row.names = FALSE, col.names = TRUE, quote = TRUE, na = "")
+          }
+        )
+        
+        if (input$ml_model == "XGBoost") {
+          # For XGBoost, we need a different approach to get SHAP values
+          tryCatch({
+            # Create a feature matrix for SHAP calculations
+            feature_matrix <- model.matrix(Group ~ . - 1, train_data)
+            
+            # Get feature names
+            feature_names <- colnames(feature_matrix)
+            
+            # Make predictions with SHAP contribution breakdown
+            # Note: this requires using xgboost's built-in SHAP capability
+            shap_contributions <- predict(model_fit$finalModel, 
+                                          newdata = as.matrix(feature_matrix),
+                                          predcontrib = TRUE)
+            
+            # Last column is usually bias/intercept, remove it
+            if (ncol(shap_contributions) > ncol(feature_matrix)) {
+              shap_contributions <- shap_contributions[, -ncol(shap_contributions)]
+            }
+            
+            # Calculate mean absolute SHAP values for each feature
+            mean_shap <- colMeans(abs(shap_contributions))
+            
+            # Create a data frame for plotting
+            shap_df <- data.frame(
+              Feature = feature_names,
+              MeanSHAP = mean_shap
+            ) %>% 
+              arrange(desc(MeanSHAP))
+            
+            rv$shap_summary <- shap_df
+            rv$shap_values <- shap_contributions
+            
+            # For debugging
+            print("SHAP calculation successful")
+            
+          }, error = function(e) {
+            # Create an error message
+            warning("Error calculating SHAP values: ", e$message)
+            # Create a placeholder summary
+            rv$shap_summary <- data.frame(
+              Feature = colnames(model.matrix(Group ~ . - 1, train_data)),
+              MeanSHAP = 0
+            )
+          })
+          
+          output$shap_plot <- renderPlot({
+            req(rv$shap_summary)
+            
+            # Take top 20 features by SHAP value
+            top_features <- head(rv$shap_summary, input$featur_top_n)
+            
+            ggplot(top_features, aes(x = reorder(Feature, MeanSHAP), y = MeanSHAP)) +
+              geom_bar(stat = "identity", fill = "steelblue") +
+              coord_flip() +
+              theme_minimal() +
+              labs(x = "Features", y = "Mean |SHAP value|", 
+                   title = paste("Top",input$featur_top_n,"Features by SHAP Importance")) +
+              theme(axis.text.y = element_text(size = 10))
+          })
+        }
+        
+        incProgress(1, detail = "Complete")
+      })
+    })
+    
+    onStop(function() {
+      stopCluster(cl)
+      registerDoSEQ()
+    }) 
+    
+    
     
     #Search in PubMed & Clinical Trials
     
     debug_log <- reactiveVal("")
-    
     
     # Function to add to debug log
     add_debug <- function(msg) {
@@ -2182,10 +2798,6 @@ APIomics<-function()
         )}
     })
     
-    
-    
-    
-    
     # First, add this at the beginning of your server function
     search_results <- reactiveVal()
     
@@ -2216,7 +2828,7 @@ APIomics<-function()
           head(20)
       } else if(input$search_source == "master_regulators") {
         req(rv$mra_results)
-        genes <- rv$mra_results[,1]  # Assuming first column contains gene names
+        genes <- rv$mra_results[,1]  
       } else if(input$search_source == "gene_regulators") {
         req(rv$wgcna_modules)
         req(input$module_selection2)
@@ -2227,7 +2839,15 @@ APIomics<-function()
           pull(gene) %>%
           head(20)
         genes <- module_genes
+        
+      }else if(input$search_source == "lasso_ai") {
+        genes <- rv$feature_lists$lasso$Feature [rv$feature_lists$lasso$Importance >= input$importance_value]
+      }else if(input$search_source == "rf_ai") {
+        genes <- rv$feature_lists$rf$Feature [rv$feature_lists$rf$Importance >= input$importance_value]
+      }else if(input$search_source == "xgb_ai") {
+        genes <- rv$feature_lists$xgb$Feature [rv$feature_lists$xgb$Importance >= input$importance_value]
       }
+      
       
       # Validate we have genes to search
       if(is.null(genes) || length(genes) == 0) {
@@ -2573,8 +3193,13 @@ APIomics<-function()
           gene_list <-  rv$wgcna_modules %>%
             filter(module == input$module_selection3) %>%
             pull(gene) 
+        }else if(input$gene_source == "lasso_ai") {
+          gene_list <- head(rv$feature_lists$lasso$Feature, n = input$importance_value2)
+        }else if(input$gene_source == "rf_ai") {
+          gene_list <- head(rv$feature_lists$rf$Feature, n = input$importance_value2)
+        }else if(input$gene_source == "xgb_ai") {
+          gene_list <- head(rv$feature_lists$xgb$Feature, n = input$importance_value2)
         }
-        
         
         incProgress(0.2, detail = "Mapping gene IDs")
         entrez_ids <- mapIds(org.Hs.eg.db, keys = gene_list, column = "ENTREZID", keytype = "SYMBOL", multiVals = "first")
@@ -2728,6 +3353,12 @@ APIomics<-function()
           filter(module == input$module_selection_db) %>%
           pull(gene) %>%
           head(20)
+      }else if(input$gene_source_db == "lasso_ai") {
+        gene_list <- head(rv$feature_lists$lasso$Feature, n = input$importance_value3)
+      }else if(input$gene_source_db == "rf_ai") {
+        gene_list <- head(rv$feature_lists$rf$Feature, n = input$importance_value3)
+      }else if(input$gene_source_db == "xgb_ai") {
+        gene_list <- head(rv$feature_lists$xgb$Feature, n = input$importance_value3)
       }
       
       gene_query <- as.character(gene_list)
@@ -2783,6 +3414,7 @@ APIomics<-function()
       filename = function() { paste("BindingDB_results_", Sys.Date(), ".csv", sep="") },
       content = function(file) { write.csv(rv$bindingdb_data, file, row.names = FALSE) }
     )
+    
     
     
   }

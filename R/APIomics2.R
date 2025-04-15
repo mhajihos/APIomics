@@ -606,7 +606,7 @@ allowWGCNAThreads()
                       
                       conditionalPanel(
                         condition = "input.search_source == 'lasso_ai' || input.search_source == 'rf_ai' || input.search_source == 'xgb_ai'",
-                      numericInput("importance_value", "Importance Threshold [from 1 to 100]", value = 20, min=1, max = 100)
+                      numericInput("importance_value", "Importance Threshold [from 1 to 100]", value = 1, min=1, max = 100)
                                 ),
                       
                       checkboxInput("clinical_trial_only", "Limit PubMed Search to Clinical Trials", FALSE),
@@ -643,7 +643,7 @@ allowWGCNAThreads()
                       
                       conditionalPanel(
                         condition = "input.gene_source == 'lasso_ai' || input.gene_source == 'rf_ai' || input.gene_source == 'xgb_ai'",
-                        numericInput("importance_value2", "Importance Threshold [from 1 to 100]", value = 20, min=1, max = 100)
+                        numericInput("importance_value2", "Importance Threshold [from 1 to 100]", value = 1, min=1, max = 100)
                       ),
                       
                       
@@ -724,7 +724,7 @@ allowWGCNAThreads()
                       
                       conditionalPanel(
                         condition = "input.gene_source_db == 'lasso_ai' || input.gene_source_db == 'rf_ai' || input.gene_source_db == 'xgb_ai'",
-                        numericInput("importance_value3", "Importance Threshold [from 1 to 100]", value = 20, min=1, max = 100)
+                        numericInput("importance_value3", "Importance Threshold [from 1 to 100]", value = 1, min=1, max = 100)
                       ),
                       
                       actionButton("search_database", "Search"))
@@ -2369,10 +2369,7 @@ allowWGCNAThreads()
     
     
     #AI Feature Selection
-    cl <- makePSOCKcluster(parallel::detectCores() - 1)
-    registerDoParallel(cl)
-    
-    observeEvent(input$ml_model, {
+   observeEvent(input$ml_model, {
       output$model_summary <- renderText({ "" })
       output$model_performance <- renderText({ "" })
       output$feature_importance <- renderPlot({ NULL })
@@ -2468,6 +2465,9 @@ allowWGCNAThreads()
         
         
         incProgress(0.2, detail = "Model Training...")
+        
+        cl <- makePSOCKcluster(parallel::detectCores() - 1)
+        registerDoParallel(cl)
         
         # Train Control for 10-fold CV on train_data
         ctrl <- trainControl(
