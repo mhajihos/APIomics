@@ -2608,7 +2608,6 @@ APIomics<-function()
           req(rv$feature_lists$rf)
           datatable(rv$feature_lists$rf,
                     options = list(pageLength = 4, 
-                                   scrollY = "400px",
                                    dom = 'Blfrtip',
                                    buttons = c('csv', 'excel')),
                     rownames = FALSE,
@@ -2622,7 +2621,6 @@ APIomics<-function()
           req(rv$feature_lists$lasso)
           datatable(rv$feature_lists$lasso,
                     options = list(pageLength = 4, 
-                                   scrollY = "400px",
                                    dom = 'Blfrtip',
                                    buttons = c('csv', 'excel')),
                     rownames = FALSE,
@@ -2636,7 +2634,6 @@ APIomics<-function()
           req(rv$feature_lists$xgb)
           datatable(rv$feature_lists$xgb,
                     options = list(pageLength = 4, 
-                                   scrollY = "400px",
                                    dom = 'Blfrtip',
                                    buttons = c('csv', 'excel')),
                     rownames = FALSE,
@@ -3367,7 +3364,6 @@ APIomics<-function()
       withProgress(message = "Searching Drug Databases...", value = 0, {
         
         # Step 1: Search ChEMBL
-        
         rv$chembl_data <- search_chembl(gene_query)
         
         rv$chembl_data2<-rv$chembl_data[,-12]
