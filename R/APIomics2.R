@@ -211,7 +211,7 @@ allowWGCNAThreads()
   `%||%` <- function(x, y) if (is.null(x)) y else x
   
   
-  #addResourcePath("static", system.file("www", package = "APIomics", mustWork = TRUE))
+  addResourcePath("static", system.file("www", package = "APIomics", mustWork = TRUE))
   
   # 1000 MB (1 GB) file size limit
   options(shiny.maxRequestSize = 1000 * 1024^2) 
@@ -578,7 +578,11 @@ allowWGCNAThreads()
                          conditionalPanel(
                            condition = "input.ml_model == 'XGBoost'",
                            box(title = "SHAP Summary Plot", status = "success", solidHeader = TRUE, width = 12,
-                               plotOutput("shap_plot", height = "500px")
+                               plotOutput("shap_plot", height = "500px"),
+                               sliderInput("shap_width", "Width (inches)", min = 4, max = 20, value = 8, width = '400px'),
+                               sliderInput("shap_height", "Height (inches)", min = 4, max = 20, value = 6, width = '400px'),
+                               numericInput("shap_res", "Resolution (dpi)", value = 300, min = 100),
+                               downloadButton("download_shap_plot", "Download SHAP Plot (TIFF)")
                            )
                          )
                   )
@@ -1478,7 +1482,7 @@ allowWGCNAThreads()
     output$group_filter_radio <- renderUI({
       req(rv$group_data)
       unique_groups <- unique(rv$group_data$Group)
-      radioButtons("selected_group", "Filter by Group (Heatmap only):",
+      radioButtons("selected_group", "Filter Samples by Group (Heatmap only):",
                    choices = c("All Groups", unique_groups),
                    selected = "All Groups")
     })
@@ -2436,6 +2440,9 @@ allowWGCNAThreads()
     observeEvent(input$run_analysis, {
       req(rv$ai_data, rv$raw_data)
     
+      cl <- makePSOCKcluster(parallel::detectCores() - 1)
+      registerDoParallel(cl)
+      
       withProgress(message = 'Running ML Pipeline with 5-Fold CV', value = 0, {
         incProgress(0.1, detail = "Preparing data...")
         set.seed(123)
@@ -2465,9 +2472,6 @@ allowWGCNAThreads()
         
         
         incProgress(0.2, detail = "Model Training...")
-        
-        cl <- makePSOCKcluster(parallel::detectCores() - 1)
-        registerDoParallel(cl)
         
         # Train Control for 10-fold CV on train_data
         ctrl <- trainControl(
@@ -2735,10 +2739,34 @@ allowWGCNAThreads()
                    title = paste("Top",input$featur_top_n,"Features by SHAP Importance")) +
               theme(axis.text.y = element_text(size = 10))
           })
+          
         }
         
         incProgress(1, detail = "Complete")
-      })
+       })
+      
+      
+      output$download_shap_plot <- downloadHandler(
+        filename = function() {
+          paste("shap_summary_plot", Sys.Date(), ".tiff", sep = "")
+        },
+        content = function(file) {
+          req(rv$shap_summary)
+          
+          top_n <- input$featur_top_n
+          shap_df <- head(rv$shap_summary[order(rv$shap_summary$MeanSHAP, decreasing = TRUE), ], top_n)
+          
+          tiff(file, width = input$shap_width, height = input$shap_height, units = "in", res = input$shap_res)
+          ggplot(shap_df, aes(x = reorder(Feature, MeanSHAP), y = MeanSHAP)) +
+            geom_bar(stat = "identity", fill = "steelblue") +
+            coord_flip() +
+            theme_minimal() +
+            labs(title = "SHAP Summary Plot", x = "Feature", y = "Mean SHAP Value")
+          dev.off()
+        }
+      )
+      
+      
     })
     
     onStop(function() {
@@ -3190,11 +3218,11 @@ allowWGCNAThreads()
           gene_list <-  rv$wgcna_modules %>%
             filter(module == input$module_selection3) %>%
             pull(gene) 
-        }else if(input$search_source == "lasso_ai") {
+        }else if(input$gene_source == "lasso_ai") {
           gene_list <- rv$feature_lists$lasso$Feature [rv$feature_lists$lasso$Importance >= input$importance_value]
-        }else if(input$search_source == "rf_ai") {
+        }else if(input$gene_source == "rf_ai") {
           gene_list <- rv$feature_lists$rf$Feature [rv$feature_lists$rf$Importance >= input$importance_value]
-        }else if(input$search_source == "xgb_ai") {
+        }else if(input$gene_source == "xgb_ai") {
           gene_list <- rv$feature_lists$xgb$Feature [rv$feature_lists$xgb$Importance >= input$importance_value]
         }
         
@@ -3350,11 +3378,11 @@ allowWGCNAThreads()
           filter(module == input$module_selection_db) %>%
           pull(gene) %>%
           head(20)
-      }else if(input$search_source == "lasso_ai") {
+      }else if(input$gene_source_db == "lasso_ai") {
         gene_list <- rv$feature_lists$lasso$Feature [rv$feature_lists$lasso$Importance >= input$importance_value]
-      }else if(input$search_source == "rf_ai") {
+      }else if(input$gene_source_db == "rf_ai") {
         gene_list <- rv$feature_lists$rf$Feature [rv$feature_lists$rf$Importance >= input$importance_value]
-      }else if(input$search_source == "xgb_ai") {
+      }else if(input$gene_source_db == "xgb_ai") {
         gene_list <- rv$feature_lists$xgb$Feature [rv$feature_lists$xgb$Importance >= input$importance_value]
       }
       
