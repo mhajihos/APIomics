@@ -3144,7 +3144,6 @@ APIomics<-function()
               pageLength = 10,
               scrollX = TRUE,
               dom = 'Bfrtip',
-              buttons = c('copy', 'csv'),
               columnDefs = list(list(
                 targets = which(colnames(results) == "URL") - 1,
                 render = JS("
@@ -3313,8 +3312,7 @@ APIomics<-function()
           options = list(
             pageLength = 10,
             scrollX = TRUE,
-            dom = 'Bfrtip',
-            buttons = c('copy', 'csv', 'excel')
+            dom = 'Bfrtip'
           ),
           escape = FALSE,  # This allows the URL column to render as HTML
           selection = 'none'
