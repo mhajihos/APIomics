@@ -105,7 +105,7 @@ allowWGCNAThreads()
                   pubchem_cid <- if (status_code(pubchem_response) == 200) rawToChar(pubchem_response$content) else NA
                   
                   temp_df <- data.frame(
-                    molecule_pref_name = molecule_name,
+                    molecule_pref_name = paste0("<a href='https://www.ebi.ac.uk/chembl/compound_report_card/", molecule_id, "' target='_blank'>", molecule_name, "</a>"),
                     molecule_chembl_id = molecule_id,
                     target_pref_name = xml_text(xml_find_first(activity, ".//target_pref_name")) %||% NA,
                     target_chembl_id = target_id,
@@ -211,7 +211,7 @@ allowWGCNAThreads()
   `%||%` <- function(x, y) if (is.null(x)) y else x
   
   
-  addResourcePath("static", system.file("www", package = "APIomics", mustWork = TRUE))
+  #addResourcePath("static", system.file("www", package = "APIomics", mustWork = TRUE))
   
   # 1000 MB (1 GB) file size limit
   options(shiny.maxRequestSize = 1000 * 1024^2) 
