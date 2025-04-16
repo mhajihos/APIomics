@@ -2753,15 +2753,17 @@ allowWGCNAThreads()
         content = function(file) {
           req(rv$shap_summary)
           
-          top_n <- input$featur_top_n
-          shap_df <- head(rv$shap_summary[order(rv$shap_summary$MeanSHAP, decreasing = TRUE), ], top_n)
+          # Take top 20 features by SHAP value
+          top_features <- head(rv$shap_summary, input$featur_top_n)
           
-          tiff(file, width = input$shap_width, height = input$shap_height, units = "in", res = input$shap_res)
-          ggplot(shap_df, aes(x = reorder(Feature, MeanSHAP), y = MeanSHAP)) +
+          P_shap<- ggplot(top_features, aes(x = reorder(Feature, MeanSHAP), y = MeanSHAP)) +
             geom_bar(stat = "identity", fill = "steelblue") +
             coord_flip() +
             theme_minimal() +
-            labs(title = "SHAP Summary Plot", x = "Feature", y = "Mean SHAP Value")
+            labs(x = "Features", y = "Mean |SHAP value|", 
+                 title = paste("Top",input$featur_top_n,"Features by SHAP Importance")) +
+            theme(axis.text.y = element_text(size = 10))
+          print(P_shap)
           dev.off()
         }
       )
