@@ -2180,28 +2180,179 @@ APIomics<-function()
     
     output$download_enrichment_plot <- downloadHandler(
       filename = function() {
-        paste("enrichment_plot_", Sys.Date(), ".tiff", sep = "")
+        paste0("enrichment_plot_", Sys.Date(), ".tiff")
       },
       content = function(file) {
-        width <- input$enrichment_plot_width
-        height <- input$enrichment_plot_height
-        res <- input$enrichment_plot_res
-        tiff(file, width = width, height = height, units = "in", res = res)
+        # Isolate all reactive dependencies to prevent unexpected updates
+        width <- isolate(input$enrichment_plot_width)
+        height <- isolate(input$enrichment_plot_height)
+        res <- isolate(input$enrichment_plot_res)
+        top_categories <- isolate(input$top_enriched)
+        enrichment_type <- isolate(rv$enrichment_type)  # Use rv's stored value instead of input
+        enrich_res <- isolate(rv$enrichment_results)
         
-        # Check if KEGG and convert if needed
-        if (rv$enrichment_type == "kegg") {
-          enrichment_readable <- setReadable(rv$enrichment_results, OrgDb = org.Hs.eg.db, keyType = "ENTREZID")
-          P1 <- dotplot(enrichment_readable, showCategory = input$top_enriched) +
-            theme(axis.text.x = element_text(size = 15), axis.text.y = element_text(size = 15))
-        } else {
-          P1 <- dotplot(rv$enrichment_results, showCategory = input$top_enriched) +
-            theme(axis.text.x = element_text(size = 15), axis.text.y = element_text(size = 15))
+        # Validate required inputs
+        if (is.null(enrich_res) || is.null(top_categories) || 
+            is.null(width) || is.null(height) || is.null(res)) {
+          showNotification("Missing required data for plot generation", type = "error")
+          # Create an empty plot with error message
+          tiff(file, width = 8, height = 6, units = "in", res = 300)
+          plot.new()
+          text(0.5, 0.5, "Insufficient data to generate plot", cex = 1.5)
+          dev.off()
+          return()
         }
         
-        print(P1)
-        dev.off()
+        # Open device with tryCatch to ensure it closes properly
+        tryCatch({
+          tiff(file, width = width, height = height, units = "in", res = res)
+          
+          # Convert to data frame for safety checks
+          df <- as.data.frame(enrich_res)
+          
+          if (nrow(df) == 0) {
+            plot.new()
+            text(0.5, 0.5, "No enrichment results found.", cex = 1.5)
+          } else {
+            # Limited number of categories to display
+            show_n <- min(top_categories, nrow(df))
+            
+            if (enrichment_type == "kegg") {
+              # Try to create readable version for KEGG
+              enrich_readable <- NULL
+              tryCatch({
+                if ("ID" %in% colnames(df) && any(grepl("^[0-9]+$", df$ID))) {
+                  enrich_readable <- setReadable(enrich_res, OrgDb = org.Hs.eg.db, keyType = "ENTREZID")
+                }
+              }, error = function(e) {
+                message("setReadable failed: ", e$message)
+              })
+              
+              # Generate plot with proper error catching
+              tryCatch({
+                if (!is.null(enrich_readable)) {
+                  p <- dotplot(enrich_readable, showCategory = show_n)
+                } else {
+                  p <- dotplot(enrich_res, showCategory = show_n)
+                }
+                p <- p + theme(axis.text.x = element_text(size = 15),
+                               axis.text.y = element_text(size = 15))
+                print(p)
+              }, error = function(e) {
+                # Fall back to manual plotting
+                message("dotplot failed, using manual plot: ", e$message)
+                
+                # Determine size variable
+                size_var <- NULL
+                for (var in c("setSize", "Count", "Size")) {
+                  if (var %in% colnames(df)) {
+                    size_var <- var
+                    break
+                  }
+                }
+                
+                # Create manual plot
+                if (!is.null(size_var)) {
+                  p <- ggplot(head(df, show_n), 
+                              aes(x = -log10(pvalue), 
+                                  y = reorder(Description, -log10(pvalue)))) +
+                    geom_point(aes(size = .data[[size_var]], color = p.adjust)) +
+                    scale_color_continuous(low = "red", high = "blue") +
+                    labs(x = "-log10(p-value)", y = "", title = "KEGG Pathway Enrichment") +
+                    theme_minimal() +
+                    theme(axis.text.y = element_text(size = 15),
+                          axis.text.x = element_text(size = 15))
+                } else {
+                  p <- ggplot(head(df, show_n), 
+                              aes(x = -log10(pvalue), 
+                                  y = reorder(Description, -log10(pvalue)))) +
+                    geom_point(aes(color = p.adjust)) +
+                    scale_color_continuous(low = "red", high = "blue") +
+                    labs(x = "-log10(p-value)", y = "", title = "KEGG Pathway Enrichment") +
+                    theme_minimal() +
+                    theme(axis.text.y = element_text(size = 15),
+                          axis.text.x = element_text(size = 15))
+                }
+                print(p)
+              })
+            } else {
+              # For GO terms - same approach with proper error handling
+              tryCatch({
+                title <- paste0("GO ", 
+                                switch(enrichment_type,
+                                       "gobp" = "Biological Process",
+                                       "gomf" = "Molecular Function",
+                                       "gocc" = "Cellular Component"),
+                                " Enrichment")
+                
+                p <- dotplot(enrich_res, showCategory = show_n) +
+                  ggtitle(title) +
+                  theme(axis.text.x = element_text(size = 15),
+                        axis.text.y = element_text(size = 15))
+                print(p)
+              }, error = function(e) {
+                # Fall back to manual plotting - same as above
+                message("GO dotplot failed, using manual plot: ", e$message)
+                
+                # Determine size variable
+                size_var <- NULL
+                for (var in c("setSize", "Count", "Size")) {
+                  if (var %in% colnames(df)) {
+                    size_var <- var
+                    break
+                  }
+                }
+                
+                title <- paste0("GO ", 
+                                switch(enrichment_type,
+                                       "gobp" = "Biological Process",
+                                       "gomf" = "Molecular Function",
+                                       "gocc" = "Cellular Component"),
+                                " Enrichment")
+                
+                # Create manual plot
+                if (!is.null(size_var)) {
+                  p <- ggplot(head(df, show_n), 
+                              aes(x = -log10(pvalue), 
+                                  y = reorder(Description, -log10(pvalue)))) +
+                    geom_point(aes(size = .data[[size_var]], color = p.adjust)) +
+                    scale_color_continuous(low = "red", high = "blue") +
+                    labs(x = "-log10(p-value)", y = "", title = title) +
+                    theme_minimal() +
+                    theme(axis.text.y = element_text(size = 15),
+                          axis.text.x = element_text(size = 15))
+                } else {
+                  p <- ggplot(head(df, show_n), 
+                              aes(x = -log10(pvalue), 
+                                  y = reorder(Description, -log10(pvalue)))) +
+                    geom_point(aes(color = p.adjust)) +
+                    scale_color_continuous(low = "red", high = "blue") +
+                    labs(x = "-log10(p-value)", y = "", title = title) +
+                    theme_minimal() +
+                    theme(axis.text.y = element_text(size = 15),
+                          axis.text.x = element_text(size = 15))
+                }
+                print(p)
+              })
+            }
+          }
+        }, error = function(e) {
+          message("Plot generation failed: ", e$message)
+          # Attempt to create an error message plot
+          tryCatch({
+            plot.new()
+            text(0.5, 0.5, paste("Error creating plot:", e$message), cex = 1.2)
+          }, finally = {
+            # This will execute regardless of success/failure of the error message plot
+          })
+        }, finally = {
+          # Always close the device, no matter what happened
+          if (dev.cur() > 1) dev.off()
+        })
       }
-    )  
+    )
+    
+    
     
     output$download_enrichment_network <- downloadHandler(
       filename = function() {
