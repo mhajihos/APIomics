@@ -3520,7 +3520,7 @@ APIomics<-function()
       gene_list <- NULL
       if (input$gene_source_db == "deg_analysis") {
         req(rv$deg_results)
-        gene_list <- rownames(rv$deg_results)[1:20]
+        gene_list <- rownames(rv$deg_results)[1:min(20, nrow(rv$deg_results))]
       } else if (input$gene_source_db == "master_regulators") {
         req(rv$mra_results)
         gene_list <- rv$mra_results[,1]
@@ -3530,7 +3530,7 @@ APIomics<-function()
         gene_list <- rv$wgcna_modules %>%
           filter(module == input$module_selection_db) %>%
           pull(gene) %>%
-          head(20)
+          head(min(20, length(gene)))
       }else if(input$gene_source_db == "lasso_ai") {
         gene_list <- rv$feature_lists$lasso$Feature [rv$feature_lists$lasso$Importance >= input$importance_value]
       }else if(input$gene_source_db == "rf_ai") {
