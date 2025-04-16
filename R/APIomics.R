@@ -701,6 +701,8 @@ APIomics<-function()
                         style = "font-size: 14px; "),
                       p("Master Regulators (Corto): The corto algorithm will run the gene network inference and master regulator analysis (MRA).",
                         style = "font-size: 14px; "),
+                      p("AI-Based Discovery: The AI-based discovery algorithm employs three distinct machine learning methods—LASSO regression, Random Forest, and XGBoost—to identify the most important genes associated with the outcome of interest. Each method offers a unique approach to feature selection: LASSO performs regularization to shrink less relevant coefficients to zero, Random Forest evaluates feature importance based on tree-based ensemble learning, and XGBoost provides a gradient-boosted decision tree framework that ranks features by their contribution to predictive performance.",
+                        style = "font-size: 14px; "),
                       p("Search in PubMed & Clinical Trials: In this section, you can call the result from DEG Analysis, Master Regulators, and WGCNA to search in the Pubmed and Clinical Trial databases.",
                         style = "font-size: 14px; "),
                       p("Gene Disease Network: In this section, you can call the result from DEG Analysis, Master Regulators, and WGCNA to find the connections for various diseases using the DISGENET database. \nDisGeNET is a discovery platform for the dynamical exploration of human diseases and their genes",
