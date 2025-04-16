@@ -3530,7 +3530,7 @@ APIomics<-function()
         gene_list <- rv$wgcna_modules %>%
           filter(module == input$module_selection_db) %>%
           pull(gene) %>%
-          head(min(20, length(gene)))
+          `[`(1:min(20, length(.)))
       }else if(input$gene_source_db == "lasso_ai") {
         gene_list <- rv$feature_lists$lasso$Feature [rv$feature_lists$lasso$Importance >= input$importance_value]
       }else if(input$gene_source_db == "rf_ai") {
