@@ -211,7 +211,7 @@ allowWGCNAThreads()
   `%||%` <- function(x, y) if (is.null(x)) y else x
   
   
-  #addResourcePath("static", system.file("www", package = "APIomics", mustWork = TRUE))
+  addResourcePath("static", system.file("www", package = "APIomics", mustWork = TRUE))
   
   # 1000 MB (1 GB) file size limit
   options(shiny.maxRequestSize = 1000 * 1024^2) 
@@ -2436,13 +2436,12 @@ allowWGCNAThreads()
     output$feature_importance <- renderPlot({ NULL }, height = 600)
     output$model_performance <- renderPrint({ NULL })
     
+    cl <- makePSOCKcluster(parallel::detectCores() - 1)
+    registerDoParallel(cl)
     
     observeEvent(input$run_analysis, {
       req(rv$ai_data, rv$raw_data)
     
-      cl <- makePSOCKcluster(parallel::detectCores() - 1)
-      registerDoParallel(cl)
-      
       withProgress(message = 'Running ML Pipeline with 5-Fold CV', value = 0, {
         incProgress(0.1, detail = "Preparing data...")
         set.seed(123)
@@ -2756,7 +2755,8 @@ allowWGCNAThreads()
           # Take top 20 features by SHAP value
           top_features <- head(rv$shap_summary, input$featur_top_n)
           
-          P_shap<- ggplot(top_features, aes(x = reorder(Feature, MeanSHAP), y = MeanSHAP)) +
+          tiff(file, width = input$shap_width, height = input$shap_height, units = "in", res = input$shap_res)
+          P_shap <- ggplot(top_features, aes(x = reorder(Feature, MeanSHAP), y = MeanSHAP)) +
             geom_bar(stat = "identity", fill = "steelblue") +
             coord_flip() +
             theme_minimal() +
