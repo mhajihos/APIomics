@@ -689,7 +689,7 @@ allowWGCNAThreads()
                       p(br()),
                       p("Instructions:",
                         style = "font-size: 16px; font-weight: bold;"),
-                      p("Input Dataset Format: Make sure your samples are in the rows and genes in the columns. It is important to have the condition (grouping) variable at the end of the file as the last column.",
+                      p("Input Dataset Format: Make sure your samples are in the columns and genes in the rows. It is important to have the condition (grouping) variable at the end of the file as the last row.",
                         style = "font-size: 14px"),
                       p("Preprocessing: The preprocessing step performs the normalization and low count filtering.",
                         style = "font-size: 14px; "),
@@ -794,9 +794,15 @@ allowWGCNAThreads()
       # Read file based on selected type
       if (input$file_type == "csv") {
         data <- fread(input$expression_file$datapath)
-        data<-data.frame(data)
-        rownames(data)<-data[,1]
-        data<-data[,-1]
+        Group<-data[dim(data)[1],]
+        data<-data[-dim(data)[1],]
+        data<-data.frame(t(data))
+        colnames(data)<-data[1,]
+        data<-data[-1,]
+        data2<-data.frame(apply(data, 2, as.numeric))
+        rownames(data2)<-rownames(data)
+        data<-data.frame(data2,Group=t(Group[,-1]))
+        
       } else if (input$file_type == "tsv") {
         data <- read.delim(input$expression_file$datapath, 
                            header = input$header)
