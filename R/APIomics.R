@@ -1424,7 +1424,7 @@ APIomics<-function()
           rv$module_colors <- unique(module_colors)
           
           
-          module_df_melt=melt(module_df,id.vars=c("Samples","Group"))
+          module_df_melt=reshape2::melt(module_df,id.vars=c("Samples","Group"))
           
           
           incProgress(0.3, detail = "Calculate the Topological Overlap Matrix")
