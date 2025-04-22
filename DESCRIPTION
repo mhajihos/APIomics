@@ -48,7 +48,8 @@ Imports:
     pROC,
     SHAPforxgboost,
     randomForest,
-    doParallel
+    doParallel,
+    pheatmap
 Suggests:
     limma,
     edgeR,
