@@ -1458,18 +1458,37 @@ allowWGCNAThreads()
       
       output$regulators_table <- renderDT({
         req(rv$wgcna_modules)
+        req(rv$moduleMembership)
+        req(input$module_selection)
+        
         # Filter genes for the selected module and create a data frame
         module_genes_df <- rv$wgcna_modules %>%
           filter(module == input$module_selection) %>%
           select(gene)
         
-        datatable(module_genes_df, 
-                  colnames = c("Genes in Module"),
+        # Add membership scores
+        module_genes_top <- rv$moduleMembership %>%
+          select(all_of(input$module_selection))
+        
+        all_genes_with_scores <- data.frame(
+          Gene = module_genes_df$gene,
+          Membership_Score = module_genes_top[module_genes_df$gene, 1],
+          stringsAsFactors = FALSE
+        )
+        
+        # Sort by membership score
+        #all_genes_sorted <- all_genes_with_scores[order(all_genes_with_scores$Membership_Score, decreasing = TRUE), ]
+        
+        datatable(all_genes_with_scores, 
+                  colnames = c("Gene", "Module Membership Score"),
                   options = list(
                     scrollX = TRUE, 
-                    pageLength = 5  # Increase number of rows displayed
-                  ))
+                    pageLength = 5
+                  )) %>%
+          formatRound("Membership_Score", 3)
       })
+      
+      
       # Add download handler for module genes
       output$download_module_genes <- downloadHandler(
         filename = function() {
@@ -1493,33 +1512,42 @@ allowWGCNAThreads()
                    selected = "All Groups")
     })
     
-    # module heatmap rendering
     output$module_heatmap <- renderPlotly({
       req(rv$group_data)
       req(rv$wgcna_modules)
-      req(rv$group_data)
       req(rv$reg_data)
       req(input$module_selection)
       req(rv$moduleMembership)
       req(input$top_regulators)
       
-      reg_data1<-rv$reg_data[,-dim(rv$reg_data)[2]]
+      reg_data1 <- rv$reg_data[,-dim(rv$reg_data)[2]]
       
-      module_genes_top <- rv$moduleMembership%>%
-        select(input$module_selection)
-      module_genes_top<-data.frame(Genes=rownames(module_genes_top),module_genes_top)
+      # STEP 1: Get genes assigned to this module by WGCNA
+      module_genes_assigned <- rv$wgcna_modules %>%
+        filter(module == input$module_selection) %>%
+        pull(gene)  # Use pull() instead of select() to get a vector
       
-      module_genes_top2<-module_genes_top[order(module_genes_top[,2],decreasing =TRUE),]
+      # STEP 2: Get module membership scores ONLY for assigned genes
+      module_membership_subset <- rv$moduleMembership[module_genes_assigned, input$module_selection, drop = FALSE]
       
+      # STEP 3: Create data frame and sort by membership score
+      module_genes_top <- data.frame(
+        Gene = rownames(module_membership_subset),
+        Membership_Score = module_membership_subset[[1]],
+        stringsAsFactors = FALSE
+      )
       
-      topGenes<-module_genes_top2[,1][1:input$top_regulators]
+      module_genes_top2 <- module_genes_top[order(module_genes_top$Membership_Score, decreasing = TRUE), ]
       
+      # STEP 4: Select top N genes
+      topGenes <- module_genes_top2$Gene[1:min(input$top_regulators, nrow(module_genes_top2))]
+      
+      # Rest of the code remains the same...
       # Filter by selected group if not "All Groups"
       if(input$selected_group != "All Groups") {
         group_indices <- which(rv$group_data$Group == input$selected_group)
         reg_data1 <- reg_data1[group_indices,]
       }
-      
       
       # Prepare group information
       mod_mat <- reg_data1 %>%
@@ -1527,35 +1555,30 @@ allowWGCNAThreads()
         as.matrix()
       
       group_data <- rv$reg_data[rownames(mod_mat), ncol(rv$reg_data), drop = FALSE]
-      
-      # Set up the gene expression data frame
-      
-      
       mod_mat <- data.frame(mod_mat, group_data)
-      #mod_mat <- mod_mat[order(mod_mat[,dim(mod_mat)[2]]),]
-      
       
       col <- colorRampPalette(rev(RColorBrewer::brewer.pal(n = 10, name = "RdYlBu")))(100)
-      ByPal <- colorRampPalette(c('yellow','purple'))
       
       # Heatmap with Plotly
       heatmaply::heatmaply(
         mod_mat[,-dim(mod_mat)[2]],
         Rowv = FALSE,
         Colv = FALSE,
-        colors =col,
-        main = paste("Top", input$top_regulators ,"Genes, Module:", input$module_selection),column_text_angle=90,
+        colors = col,
+        main = paste("Top", input$top_regulators ,"Genes, Module:", input$module_selection),
+        column_text_angle = 90,
         showticklabels = c(TRUE, FALSE)
-      )%>%
+      ) %>%
         layout(
           legend = list(
-            orientation = "h", # Horizontal legend placement
-            x = 0.5, y = -0.5, # Adjust legend position
+            orientation = "h",
+            x = 0.5, y = -0.5,
             xanchor = "center",
-            yanchor = "botttom"
+            yanchor = "bottom"
           )
         )
     })
+    
     
     
     
@@ -3457,5 +3480,3 @@ allowWGCNAThreads()
 }
 
 APIomics2()
-
-
