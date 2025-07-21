@@ -1498,11 +1498,24 @@ allowWGCNAThreads()
           module_genes_df <- rv$wgcna_modules %>%
             filter(module == input$module_selection) %>%
             select(gene)
-          write.csv(module_genes_df, file, row.names = FALSE)
+          
+          # Add membership scores
+          module_genes_top <- rv$moduleMembership %>%
+            select(all_of(input$module_selection))
+          
+          all_genes_with_scores <- data.frame(
+            Gene = module_genes_df$gene,
+            Membership_Score = module_genes_top[module_genes_df$gene, 1],
+            stringsAsFactors = FALSE
+          )
+          
+          write.csv(all_genes_with_scores, file, row.names = FALSE)
         }
       )
       
     })
+    
+    
     
     output$group_filter_radio <- renderUI({
       req(rv$group_data)
@@ -1677,7 +1690,7 @@ allowWGCNAThreads()
             setProgress(value = 0.2, message = "Preparing module data...")
             
             # Check if required data exists
-            if(is.null(rv$reg_data) || is.null(rv$moduleMembership)) {
+            if(is.null(rv$reg_data) || is.null(rv$moduleMembership) || is.null(rv$wgcna_modules)) {
               showNotification("Required data is missing. Make sure the analysis has been completed.", type = "error")
               return(NULL)
             }
@@ -1688,28 +1701,37 @@ allowWGCNAThreads()
             
             setProgress(value = 0.3, message = "Selecting top genes...")
             
-            # Get top genes for selected module - fix the tidyselect warning
-            module_genes_top <- rv$moduleMembership %>%
-              dplyr::select(all_of(module_selection))  # Using all_of() as recommended
+            # STEP 1: Get genes assigned to this module by WGCNA (SAME AS RENDERPLOTLY)
+            module_genes_assigned <- rv$wgcna_modules %>%
+              filter(module == module_selection) %>%
+              pull(gene)  # Use pull() instead of select() to get a vector
             
-            # Create a data frame with gene names
+            # Check if we have genes assigned to this module
+            if(length(module_genes_assigned) == 0) {
+              showNotification("No genes assigned to this module.", type = "error")
+              return(NULL)
+            }
+            
+            # STEP 2: Get module membership scores ONLY for assigned genes (SAME AS RENDERPLOTLY)
+            module_membership_subset <- rv$moduleMembership[module_genes_assigned, module_selection, drop = FALSE]
+            
+            # STEP 3: Create data frame and sort by membership score (SAME AS RENDERPLOTLY)
             module_genes_top <- data.frame(
-              Genes = rownames(module_genes_top), 
-              Score = module_genes_top[[1]], 
+              Gene = rownames(module_membership_subset),
+              Membership_Score = module_membership_subset[[1]],
               stringsAsFactors = FALSE
             )
             
-            # Sort genes by membership score
-            module_genes_top2 <- module_genes_top[order(module_genes_top$Score, decreasing = TRUE), ]
+            module_genes_top2 <- module_genes_top[order(module_genes_top$Membership_Score, decreasing = TRUE), ]
+            
+            # STEP 4: Select top N genes (SAME AS RENDERPLOTLY)
+            topGenes <- module_genes_top2$Gene[1:min(top_regulators, nrow(module_genes_top2))]
             
             # Check if we have enough genes
-            if(nrow(module_genes_top2) < top_regulators) {
-              top_regulators <- nrow(module_genes_top2)
-              showNotification(paste("Only", top_regulators, "genes available for this module."), type = "warning")
+            if(length(topGenes) == 0) {
+              showNotification("No genes available for this module.", type = "error")
+              return(NULL)
             }
-            
-            # Get top N genes
-            topGenes <- module_genes_top2$Genes[1:top_regulators]
             
             setProgress(value = 0.4, message = "Filtering data...")
             
@@ -1785,7 +1807,7 @@ allowWGCNAThreads()
             names(group_colors) <- unique_groups
             ann_colors <- list(Group = group_colors)
             
-            # Create the title
+            # Create the title - matching renderPlotly title
             main_title <- paste("Top", top_regulators, "Genes,",
                                 "Module:", module_selection,
                                 if(selected_group != "All Groups") paste("Group:", selected_group) else "")
